@@ -14,8 +14,8 @@ fi
 echo
 echo "== Kalshi: newly settled markets"
 $PY kalshi_history.py markets --series KXINX KXINXZ KXNASDAQ100 KXNASDAQ100Z
-echo; echo "== Kalshi: hourly prices for markets closed since $SINCE"
-$PY kalshi_history.py candles --period 60 --series KXINX --since "$SINCE"
+echo; echo "== Kalshi: hourly prices for markets closed since $SINCE (S&P 500 and Nasdaq-100)"
+$PY kalshi_history.py candles --period 60 --series KXINX KXNASDAQ100 --since "$SINCE"
 echo; echo "== Polymarket: new daily S&P markets and their prices"
 $PY polymarket_history.py events --start 2025-01-01
 $PY polymarket_history.py prices --fidelity 10
@@ -24,7 +24,8 @@ $PY validate_kalshi.py 2>/dev/null | grep -v -i warn
 echo; echo "== Live snapshots captured, last 10 days (about 18 per weekday from the cloud, plus any from the Mac)"
 for d in $(ls ../data/raw/spx_options 2>/dev/null | tail -10); do
   n=$(ls ../data/raw/spx_options/$d 2>/dev/null | wc -l | tr -d ' ')
+  nn=$(ls ../data/raw/ndx_options/$d 2>/dev/null | wc -l | tr -d ' ')
   dow=$(date -j -f %Y-%m-%d "$d" +%a 2>/dev/null || date -d "$d" +%a)
-  printf "  %s %s  %2s snapshots %s\n" "$d" "$dow" "$n" "$( [ "$n" -lt 14 ] && [ "$dow" != Sat ] && [ "$dow" != Sun ] && echo '<- fewer than expected: check the Actions tab on GitHub')"
+  printf "  %s %s  %2s S&P / %2s Nasdaq snapshots %s\n" "$d" "$dow" "$n" "$nn" "$( [ "$n" -lt 14 ] && [ "$dow" != Sat ] && [ "$dow" != Sun ] && echo '<- fewer than expected: check the Actions tab on GitHub')"
 done
 echo; echo "Done. Intraday files: $(ls ../data/raw/intraday 2>/dev/null | wc -l | tr -d ' ')"

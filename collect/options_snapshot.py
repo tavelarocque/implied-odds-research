@@ -1,4 +1,4 @@
-"""Snapshot the SPX option chain from Cboe's delayed-quote feed (about 15 minutes delayed).
+"""Snapshot index option chains (SPX and NDX by default) from Cboe's delayed-quote feed (about 15 minutes delayed).
 
 Keeps only short-dated expiries, which are the ones that line up with Kalshi's daily and weekly
 S&P 500 contracts and are what Breeden-Litzenberger needs. Each row is one option quote; the first
@@ -8,21 +8,23 @@ import os, re, sys
 from datetime import date, datetime
 from common import get_json, now_utc, out_path, write_jsonl_gz
 
-URL = "https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json"
+URL = "https://cdn.cboe.com/api/global/delayed_quotes/options/_{u}.json"
+# SPX (with PM-settled SPXW) for the S&P 500, NDX (with PM-settled NDXP) for the Nasdaq-100.
+UNDERLYINGS = [u.strip() for u in os.environ.get("SNAP_UNDERLYINGS", "SPX,NDX").split(",") if u.strip()]
 MAX_DAYS = int(os.environ.get("SNAP_MAX_DAYS", 14))          # keep expiries up to two weeks out
 MAX_MONEYNESS = float(os.environ.get("SNAP_MAX_MONEYNESS", 0) or 0)  # e.g. 0.08 keeps strikes within 8% of spot; 0 keeps all
-OCC = re.compile(r"^(SPXW?)(\d{6})([CP])(\d{8})$")
+OCC = re.compile(r"^([A-Z]+)(\d{6})([CP])(\d{8})$")
 FIELDS = ["bid", "ask", "bid_size", "ask_size", "iv", "open_interest", "volume", "delta", "gamma",
           "vega", "theta", "theo", "last_trade_price", "last_trade_time", "prev_day_close"]
 
 
-def main():
+def snapshot(u):
     ts = now_utc()
-    raw = get_json(URL)
+    raw = get_json(URL.format(u=u))
     d = raw["data"]
     today = ts.date()
     rows = [{"type": "header", "collected_utc": ts.isoformat(), "feed_timestamp": raw.get("timestamp"),
-             "underlying": "SPX", "spot": d.get("current_price"), "spot_bid": d.get("bid"),
+             "underlying": u, "spot": d.get("current_price"), "spot_bid": d.get("bid"),
              "spot_ask": d.get("ask"), "prev_close": d.get("prev_day_close")}]
     kept = 0
     for o in d["options"]:
@@ -41,13 +43,21 @@ def main():
         row.update({k: o.get(k) for k in FIELDS})
         rows.append(row)
         kept += 1
-    path = write_jsonl_gz(out_path("spx_options", ts), rows)
-    print(f"{ts.isoformat()} spx_options spot={d.get('current_price')} kept={kept} -> {path}")
+    path = write_jsonl_gz(out_path(f"{u.lower()}_options", ts), rows)
+    print(f"{ts.isoformat()} {u.lower()}_options spot={d.get('current_price')} kept={kept} -> {path}")
+
+
+def main():
+    failed = []
+    for u in UNDERLYINGS:
+        try:
+            snapshot(u)
+        except Exception as e:                      # one index failing must not lose the others
+            print(f"options_snapshot {u} FAILED: {e!r}", file=sys.stderr)
+            failed.append(u)
+    if failed and len(failed) == len(UNDERLYINGS):
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        print(f"options_snapshot FAILED: {e!r}", file=sys.stderr)
-        sys.exit(1)
+    main()

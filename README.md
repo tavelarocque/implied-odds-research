@@ -108,7 +108,7 @@ mispricing. Separating risk premium from genuine disagreement is part of the ana
 
 | Source | What | Notes |
 |---|---|---|
-| Cboe delayed quotes | SPX options expiring within 14 days: bid, ask, IV, Greeks, volume, open interest | About 15 minutes delayed. The header row stores the feed timestamp for alignment. |
+| Cboe delayed quotes | SPX and NDX options (including PM-settled SPXW and NDXP) expiring within 14 days: bid, ask, IV, Greeks, volume, open interest | About 15 minutes delayed. The header row stores the feed timestamp for alignment. |
 | Kalshi public API | Open markets in KXINX, KXINXU, KXINXW, KXNASDAQ100, KXNASDAQ100U | Real time. Strike ranges, bid/ask, volume, close time. |
 
 Files land in `data/raw/<source>/<date>/` as gzipped JSON lines, timestamped in UTC. `data/` is git-ignored.
