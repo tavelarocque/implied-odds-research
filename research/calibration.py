@@ -48,14 +48,23 @@ print(f"{len(mk):,} settled markets across {mk.event_ticker.nunique():,} trading
 
 # %% Read one quote per market per horizon from the hourly candles
 def dollars(block, field="close"):
-    """Candle price blocks come as {'close_dollars': '0.12'} (new) or {'close': 12} in cents (old)."""
+    """Kalshi candle prices come in three formats across its history:
+         {'close_dollars': '0.12'}   newest data, dollars as a string
+         {'close': '0.1200'}         archived data, dollars as a string
+         {'close': 12}               oldest format, integer cents
+    """
     if not block:
         return np.nan
-    if block.get(f"{field}_dollars") not in (None, ""):
-        return float(block[f"{field}_dollars"])
-    if block.get(field) is not None:
-        return float(block[field]) / 100
-    return np.nan
+    raw = block.get(f"{field}_dollars")
+    if raw in (None, ""):
+        raw = block.get(field)
+        if raw in (None, ""):
+            return np.nan
+        if not isinstance(raw, str):
+            return float(raw) / 100          # numeric values are cents
+    return float(raw)
+
+assert dollars({"close_dollars": "0.12"}) == 0.12 and dollars({"close": "0.1200"}) == 0.12 and dollars({"close": 12}) == 0.12
 
 rows, missing = [], 0
 cdir = os.path.join(HIST, "candles_60m", SERIES)
@@ -91,6 +100,9 @@ if q.empty:
     sys.exit("No usable quotes yet: pull hourly candles first (collect/kalshi_history.py candles --period 60 --series KXINX).")
 q = q[(q.bid > 0) & (q.ask < 1) & (q.ask > q.bid) & (q.ask - q.bid <= MAX_SPREAD)].copy()
 q["mid"] = (q.bid + q.ask) / 2
+# Guard against unit errors: prices on a $1 contract must look like prices. A typical quoted spread is a few cents.
+if not (0.005 < (q.ask - q.bid).median() < 0.2 and 0.02 < q.mid.mean() < 0.6):
+    sys.exit(f"Price units look wrong (median spread {(q.ask - q.bid).median():.4f}, mean mid {q.mid.mean():.4f}). Stopping.")
 q["year"] = q.date.str[:4]
 q.to_csv(os.path.join(OUT, "quotes.csv.gz"), index=False)
 print(q.groupby("h").agg(quotes=("ticker", "size"), days=("event", "nunique"), median_spread=("ask", lambda s: (s - q.loc[s.index, "bid"]).median())))
@@ -99,14 +111,20 @@ print(q.groupby("h").agg(quotes=("ticker", "size"), days=("event", "nunique"), m
 # Contracts on the same day are not independent (exactly one wins), so intervals resample whole days.
 BINS = [0, .02, .05, .10, .20, .30, .40, .50, .60, .70, .80, .90, .95, .98, 1.0]
 
-def cluster_boot(df, stat, n=BOOT):
-    groups = {k: g for k, g in df.groupby("event")}
-    keys = np.array(list(groups))
+def cluster_boot(df, stat_w, n=BOOT):
+    """95% interval for stat_w(df, weights), resampling whole trading days with replacement.
+    Each resample is expressed as row weights (how many times each row's day was drawn), which is
+    equivalent to rebuilding the data but far faster."""
+    codes, uniq = pd.factorize(df["event"])
+    k = len(uniq)
     out = []
     for _ in range(n):
-        pick = rng.choice(keys, size=len(keys), replace=True)
-        out.append(stat(pd.concat([groups[k] for k in pick])))
+        counts = np.bincount(rng.integers(0, k, k), minlength=k)
+        out.append(stat_w(df, counts[codes]))
     return np.nanpercentile(out, [2.5, 97.5])
+
+def wmean(col):
+    return lambda d, w: np.average(d[col].values, weights=w) if w.sum() > 0 else np.nan
 
 def calib_table(df):
     df = df.assign(bin=pd.cut(df.mid, BINS, include_lowest=True))
@@ -115,7 +133,7 @@ def calib_table(df):
     lo, hi = [], []
     for b in t["bin"]:
         sub = df[df.bin == b]
-        l, u = cluster_boot(sub, lambda d: d.y.mean(), n=200) if len(sub) >= 30 else (np.nan, np.nan)
+        l, u = cluster_boot(sub, wmean("y"), n=300) if len(sub) >= 30 else (np.nan, np.nan)
         lo.append(l); hi.append(u)
     t["hit_lo"], t["hit_hi"] = lo, hi
     t["gap"] = t.hit - t.price
@@ -133,11 +151,12 @@ def logit(p):
     p = np.clip(p, 1e-4, 1 - 1e-4)
     return np.log(p / (1 - p))
 
-def fit_ab(df):
+def fit_ab(df, w=None):
     x, y = logit(df.mid.values), df.y.values
-    def nll(w):
-        z = w[0] + w[1] * x
-        return np.sum(np.logaddexp(0, z) - y * z)
+    w = np.ones_like(x) if w is None else np.asarray(w, float)
+    def nll(p):
+        z = p[0] + p[1] * x
+        return np.sum(w * (np.logaddexp(0, z) - y * z))
     return minimize(nll, [0.0, 1.0], method="BFGS").x
 
 def brier(df):
@@ -147,7 +166,7 @@ fl = []
 for h in HORIZONS_H:
     d = q[q.h == h]
     a, b = fit_ab(d)
-    b_lo, b_hi = cluster_boot(d, lambda s: fit_ab(s)[1], n=200)
+    b_lo, b_hi = cluster_boot(d, lambda s, w: fit_ab(s, w)[1], n=200)
     fl.append({"h": h, "quotes": len(d), "days": d.event.nunique(), "a": a, "b": b, "b_lo": b_lo, "b_hi": b_hi, "brier": brier(d)})
 fl = pd.DataFrame(fl)
 print("\nFavourite-longshot fit (b > 1 = long shots overpriced):")
@@ -167,7 +186,7 @@ for (h, b), g in q.groupby(["h", "bin"], observed=True):
         continue
     for side in ("yes", "no"):
         col = f"pnl_{side}"
-        lo, hi = cluster_boot(g, lambda d: d[col].mean(), n=200)
+        lo, hi = cluster_boot(g, wmean(col), n=300)
         pnl.append({"h": h, "bin": str(b), "side": side, "n": len(g), "mean_cents": 100 * g[col].mean(),
                     "lo_cents": 100 * lo, "hi_cents": 100 * hi})
 pnl = pd.DataFrame(pnl)

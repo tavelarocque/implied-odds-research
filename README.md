@@ -50,6 +50,16 @@ it cell by cell like a notebook.
   planted edge; Breeden-Litzenberger recovers known probabilities from noisy quotes (within 0.01 pp on a flat
   smile, 0.63 pp on a skewed one); and no strategy rule can see future prices (864 perturbation checks).
 
+### Result: calibration (layer 4)
+
+Kalshi's S&P 500 daily range contracts are well calibrated. Across 1,129 trading days (April 2022 to March 2026,
+holdout excluded) and 15,000+ quotes, contracts priced at p paid out close to p of the time at every horizon from
+1 to 24 hours before the close. There is a small favourite-longshot bias in the last hours: the calibration slope is
+1.09 one hour before the close (95% interval 1.01 to 1.20, resampling whole days) and 1.11 three hours before,
+meaning cheap contracts win slightly less often than priced. It is too small to exploit: no price bucket made money
+for a taker after the bid-ask spread and Kalshi's fee. The bias was strongest in 2022 (slope 1.44 at one hour) and
+has faded toward 1.0 since 2024, consistent with a market that became more efficient as it grew.
+
 ### Result so far: strategy discovery
 
 Searching harder makes the in-sample winner look better and perform worse. Picking the best of 1,000 rules
