@@ -104,12 +104,13 @@ mispricing. Separating risk premium from genuine disagreement is part of the ana
 
 ## Data collection
 
-`collect/run_snapshot.sh` takes one matched snapshot:
+Every 30 minutes on weekdays, a GitHub Actions job (`.github/workflows/snapshot.yml`) takes one matched snapshot and commits it to the `data` branch; `collect/run_snapshot.sh` does the same on the Mac as a backup:
 
 | Source | What | Notes |
 |---|---|---|
 | Cboe delayed quotes | SPX and NDX options (including PM-settled SPXW and NDXP) expiring within 14 days: bid, ask, IV, Greeks, volume, open interest | About 15 minutes delayed. The header row stores the feed timestamp for alignment. |
-| Kalshi public API | Open markets in KXINX, KXINXU, KXINXW, KXNASDAQ100, KXNASDAQ100U | Real time. Strike ranges, bid/ask, volume, close time. |
+| Kalshi public API | Open daily ladders: KXINX, KXINXW, KXNASDAQ100 | Real time. Strike ranges, bid/ask, volume, close time. |
+| Polymarket CLOB API | Live order books (top 10 levels, both outcomes) for the daily S&P and Nasdaq-100 up/down markets | Real time. Replaces the assumed spread in layer 6 with real ones. |
 
 Files land in `data/raw/<source>/<date>/` as gzipped JSON lines, timestamped in UTC. `data/` is git-ignored.
 
