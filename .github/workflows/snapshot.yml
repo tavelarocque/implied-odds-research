@@ -1,6 +1,6 @@
 # Cloud data collection: runs on GitHub's servers, so no laptop needs to be on.
 # Every 30 minutes on weekdays across US market hours (13:15 to 21:45 UTC covers both daylight and standard time),
-# it takes a matched SPX options + Kalshi snapshot; on the last runs of the day it also saves a week of
+# it takes a matched snapshot of SPX and NDX options, Kalshi's daily ladders and Polymarket's daily order books; on the last runs of the day it also saves a week of
 # one-minute S&P prices. Results are committed to the `data` branch, kept separate from the code on `main`.
 name: snapshot
 
@@ -27,7 +27,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Options and Kalshi snapshot
+      - name: Options, Kalshi and Polymarket snapshot
         env:
           SNAP_MAX_DAYS: "10"
           SNAP_MAX_MONEYNESS: "0.08"
@@ -35,6 +35,7 @@ jobs:
           cd collect
           python options_snapshot.py
           python kalshi_snapshot.py
+          python polymarket_snapshot.py
 
       - name: One-minute S&P prices (late-day runs, and manual test runs)
         if: github.event_name == 'workflow_dispatch' || github.event.schedule != ''
