@@ -19,7 +19,8 @@ from common import ROOT, get_json
 GAMMA = "https://gamma-api.polymarket.com"
 CLOB = "https://clob.polymarket.com"
 OUT = os.path.join(ROOT, "data", "history", "polymarket")
-KINDS = {"close": "spx-up-or-down-on-{d}", "open": "spx-opens-up-or-down-on-{d}"}
+KINDS = {"close": "spx-up-or-down-on-{d}", "open": "spx-opens-up-or-down-on-{d}",
+         "ndx_close": "ndx-up-or-down-on-{d}"}
 PAUSE = 0.15
 
 

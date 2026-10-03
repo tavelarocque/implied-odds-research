@@ -13,7 +13,7 @@
 #      pays when the close is above K (including the range containing K) pays at least $1 in every outcome,
 #      so if that package costs less than $1, it's free money. Same for the mirror trade.
 #
-# Run from the project root:  python3 research/cross_venue.py
+# Run from the project root:  python3 research/cross_venue.py [spx|ndx]   (default spx)
 
 # %%
 import glob, gzip, json, os, re, sys
@@ -40,7 +40,9 @@ from config import exploratory, FINAL_TEST_START, HOLDOUT_UNLOCKED
 
 K_HIST = os.path.join(ROOT, "data", "history", "kalshi")
 P_HIST = os.path.join(ROOT, "data", "history", "polymarket")
-OUT = os.path.join(ROOT, "research", "output", "cross_venue")
+INDEX = sys.argv[1] if len(sys.argv) > 1 else "spx"       # "spx" or "ndx"
+SERIES, POLY_KIND, INDEX_NAME = {"spx": ("KXINX", "close", "S&P 500"), "ndx": ("KXNASDAQ100", "ndx_close", "Nasdaq-100")}[INDEX]
+OUT = os.path.join(ROOT, "research", "output", "cross_venue" if INDEX == "spx" else f"cross_venue_{INDEX}")
 os.makedirs(OUT, exist_ok=True)
 HOURS = [6, 5, 4, 3, 2, 1]            # hours before the 4pm ET close
 POLY_HALF_SPREAD = 0.005              # assumed cost of crossing Polymarket's spread (its history has no bid/ask)
@@ -74,7 +76,7 @@ def dollars(block, field="close"):
     return float(raw)
 
 # %% Kalshi: settled ladders by trading day, with the close (settlement value) of each day
-mk = pd.DataFrame(read_jsonl(os.path.join(K_HIST, "markets_KXINX.jsonl.gz")))
+mk = pd.DataFrame(read_jsonl(os.path.join(K_HIST, f"markets_{SERIES}.jsonl.gz")))
 mk = mk[mk.result.isin(["yes", "no"])]
 mk["day"] = mk.close_time.str[:10]
 days = mk.groupby("day").agg(event=("event_ticker", "first"), close_time=("close_time", "first"),
@@ -86,8 +88,10 @@ days.loc[gap_days.values > 4, "prev_close"] = np.nan          # don't bridge lon
 
 # %% Polymarket: daily close markets, their rule, outcome and 10-minute price history
 pm = pd.DataFrame(read_jsonl(os.path.join(P_HIST, "events.jsonl.gz")))
-pm = pm[(pm.kind == "close") & pm.rules.str.contains("prior trading day", case=False, na=False)].copy()
-print(f"Polymarket close-vs-previous-close markets: {len(pm)} ({pm.date.min()} to {pm.date.max()})")
+allk = pm[pm.kind == POLY_KIND]
+pm = allk[allk.rules.str.contains("prior trading day", case=False, na=False)].copy()
+print(f"Polymarket {INDEX_NAME} daily markets: {len(allk)}; settling on close vs previous close: {len(pm)} "
+      f"({pm.date.min()} to {pm.date.max()}); other rules excluded: {len(allk) - len(pm)}")
 pm = pm[exploratory(pm.date)]
 print(f"after holdout: {len(pm)}" + ("" if HOLDOUT_UNLOCKED else f" (from {FINAL_TEST_START} reserved)"))
 
@@ -110,7 +114,7 @@ def at(t_arr, v_arr, target, max_age):
     return v_arr[i] if i >= 0 and target - t_arr[i] <= max_age else np.nan
 
 # %% Line the two venues up hour by hour
-cdir = os.path.join(K_HIST, "candles_60m", "KXINX")
+cdir = os.path.join(K_HIST, "candles_60m", SERIES)
 rows, agree, n_checked, skipped = [], 0, 0, 0
 for e in pm.itertuples():
     if e.date not in days.index or pd.isna(days.loc[e.date, "prev_close"]):
@@ -242,7 +246,7 @@ ax.hist(df.best_cost, bins=bins, alpha=.75, color="#4a6fa5", label="after fees a
 ax.axvline(1.0, color="#b8520a", lw=1.5)
 ax.set_xlabel("Cost of a package that pays at least $1"); ax.set_ylabel("Observations")
 ax.set_title("No arbitrage: every package cost over $1"); ax.legend(frameon=False, fontsize=8)
-fig.suptitle(f"Kalshi vs Polymarket, S&P 500 up or down, {df.date.min()} to {df.date.max()} ({df.date.nunique()} days)", y=1.02)
+fig.suptitle(f"Kalshi vs Polymarket, {INDEX_NAME} up or down, {df.date.min()} to {df.date.max()} ({df.date.nunique()} days)", y=1.02)
 fig.tight_layout()
 fig.savefig(os.path.join(OUT, "cross_venue.png"), dpi=160, bbox_inches="tight")
 print(f"\nWritten to {OUT}")

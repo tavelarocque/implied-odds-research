@@ -6,7 +6,7 @@
 # about 20% of the time. This script measures that at several horizons before the close, tests for the
 # favourite-longshot bias, and checks whether any gap survives the bid-ask spread and Kalshi's taker fee.
 #
-# Run from the project root:  python3 research/calibration.py
+# Run from the project root:  python3 research/calibration.py [SERIES]   (default KXINX; KXNASDAQ100 for Nasdaq-100)
 # Cells are marked with `# %%`, so VS Code can also run it as a notebook.
 
 # %%
@@ -21,9 +21,10 @@ import matplotlib.pyplot as plt
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HIST = os.path.join(ROOT, "data", "history", "kalshi")
-OUT = os.path.join(ROOT, "research", "output", "calibration")
+SERIES = sys.argv[1] if len(sys.argv) > 1 else "KXINX"     # e.g. KXNASDAQ100 for the Nasdaq-100 replication
+NAMES = {"KXINX": "S&P 500", "KXNASDAQ100": "Nasdaq-100"}
+OUT = os.path.join(ROOT, "research", "output", "calibration" if SERIES == "KXINX" else f"calibration_{SERIES}")
 os.makedirs(OUT, exist_ok=True)
-SERIES = "KXINX"
 HORIZONS_H = [1, 3, 6, 24]      # hours before the 4pm ET close
 MAX_STALENESS_H = 1.0           # the quote must come from within an hour of the target time
 MAX_SPREAD = 0.10               # skip contracts quoted wider than 10 cents
@@ -218,7 +219,7 @@ for ax, h in zip(axes, HORIZONS_H):
     ax.set_xlim(0, 1); ax.set_ylim(0, 1); ax.grid(alpha=.25)
 axes[0].set_ylabel("Share that paid out")
 axes[0].legend(loc="upper left", fontsize=8, frameon=False)
-fig.suptitle(f"Kalshi S&P 500 daily range contracts ({SERIES}), {q.date.min()} to {q.date.max()}", y=1.02)
+fig.suptitle(f"Kalshi {NAMES.get(SERIES, SERIES)} daily range contracts ({SERIES}), {q.date.min()} to {q.date.max()}", y=1.02)
 fig.tight_layout()
 fig.savefig(os.path.join(OUT, "calibration.png"), dpi=160, bbox_inches="tight")
 
