@@ -5,6 +5,13 @@
 cd "$(dirname "$0")" || exit 1
 PY=/usr/bin/python3
 SINCE=$(date -v-21d +%Y-%m-%d 2>/dev/null || date -d '21 days ago' +%Y-%m-%d)
+echo "== Cloud snapshots: download what GitHub collected this week"
+if git -C .. fetch -q origin data 2>/dev/null; then
+  git -C .. archive origin/data data/raw | tar -x --strip-components 2 -C ../data/raw && echo "  merged into data/raw"
+else
+  echo "  could not reach the data branch (offline?), skipping"
+fi
+echo
 echo "== Kalshi: newly settled markets"
 $PY kalshi_history.py markets --series KXINX KXINXZ KXNASDAQ100 KXNASDAQ100Z
 echo; echo "== Kalshi: hourly prices for markets closed since $SINCE"
@@ -14,10 +21,10 @@ $PY polymarket_history.py events --start 2025-01-01
 $PY polymarket_history.py prices --fidelity 60
 echo; echo "== Data checks"
 $PY validate_kalshi.py 2>/dev/null | grep -v -i warn
-echo; echo "== Live snapshots captured, last 10 days (15 scheduled per weekday)"
+echo; echo "== Live snapshots captured, last 10 days (about 18 per weekday from the cloud, plus any from the Mac)"
 for d in $(ls ../data/raw/spx_options 2>/dev/null | tail -10); do
   n=$(ls ../data/raw/spx_options/$d 2>/dev/null | wc -l | tr -d ' ')
   dow=$(date -j -f %Y-%m-%d "$d" +%a 2>/dev/null || date -d "$d" +%a)
-  printf "  %s %s  %2s snapshots %s\n" "$d" "$dow" "$n" "$( [ "$n" -lt 12 ] && [ "$dow" != Sat ] && [ "$dow" != Sun ] && echo '<- gaps: was the Mac asleep?')"
+  printf "  %s %s  %2s snapshots %s\n" "$d" "$dow" "$n" "$( [ "$n" -lt 14 ] && [ "$dow" != Sat ] && [ "$dow" != Sun ] && echo '<- fewer than expected: check the Actions tab on GitHub')"
 done
 echo; echo "Done. Intraday files: $(ls ../data/raw/intraday 2>/dev/null | wc -l | tr -d ' ')"
