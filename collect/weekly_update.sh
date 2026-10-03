@@ -18,7 +18,7 @@ echo; echo "== Kalshi: hourly prices for markets closed since $SINCE"
 $PY kalshi_history.py candles --period 60 --series KXINX --since "$SINCE"
 echo; echo "== Polymarket: new daily S&P markets and their prices"
 $PY polymarket_history.py events --start 2025-01-01
-$PY polymarket_history.py prices --fidelity 60
+$PY polymarket_history.py prices --fidelity 10
 echo; echo "== Data checks"
 $PY validate_kalshi.py 2>/dev/null | grep -v -i warn
 echo; echo "== Live snapshots captured, last 10 days (about 18 per weekday from the cloud, plus any from the Mac)"

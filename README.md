@@ -10,7 +10,7 @@ where, when and why they disagree. Every claimed edge goes through one shared ro
 |---|---|---|
 | Robustness | `robustness/` | Is a backtest result real, or the luckiest of many tries? Deflated Sharpe ratio, probability of backtest overfitting (CSCV), minimum track record length. Tested in `tests/`. |
 | Strategy discovery | `research/strategy_discovery.py` | Search 2,120 rule-based strategies on SPY and nine sector ETFs: how much of the best backtest survives out of sample? |
-| Implied Odds | `research/calibration.py` and later phases | Are Kalshi's S&P contracts calibrated, and do they agree with option-implied probabilities? |
+| Implied Odds | `research/calibration.py`, `research/cross_venue.py` and later phases | Are Kalshi's S&P contracts calibrated, do they agree with Polymarket and with option-implied probabilities? |
 
 ## Code map
 
@@ -22,7 +22,8 @@ implied-odds/
 │   ├── rules.py           momentum, moving-average cross, mean reversion, breakout
 │   └── backtest.py        signals -> positions (shifted a day) -> returns after costs
 ├── implied/             Layer 5: option-implied probabilities
-│   └── bl.py              forward from put-call parity, SVI smile fit, Breeden-Litzenberger probabilities
+│   ├── bl.py              forward from put-call parity, SVI smile fit, Breeden-Litzenberger probabilities
+│   └── kalshi_ladder.py   Kalshi range ladder -> P(close > K), and the cost of trading it
 ├── collect/             Layer 1: data
 │   ├── options_snapshot.py, kalshi_snapshot.py, run_snapshot.sh   live snapshots every 30 min
 │   ├── kalshi_history.py, polymarket_history.py, etf_prices.py    history pullers
@@ -31,7 +32,7 @@ implied-odds/
 │   └── status.sh          download progress
 ├── research/            one script per study; each writes to research/output/
 │   ├── config.py          the locked holdout
-│   ├── strategy_discovery.py, calibration.py, fair_value_snapshot.py
+│   ├── strategy_discovery.py, calibration.py, cross_venue.py, fair_value_snapshot.py
 ├── tests/               python3 run_tests.py runs them all
 └── notebooks/tour.ipynb a guided walk through the code
 ```
@@ -46,9 +47,27 @@ it cell by cell like a notebook.
 - **Data checks.** `collect/validate_kalshi.py` confirms no duplicate contracts, one winner per trading day
   (2 of 1,131 days fail and are excluded), and that every Kalshi settlement value matches the S&P 500 close
   (1,126 of 1,126 within 5 cents).
-- **Tested tools.** `python3 run_tests.py` runs three tests: the robustness layer rejects pure noise and finds a
+- **Tested tools.** `python3 run_tests.py` runs four tests, including the Kalshi ladder maths (exact on range
+  boundaries, within 0.16 pp between them, correct basket costs and fees). The other three: the robustness layer rejects pure noise and finds a
   planted edge; Breeden-Litzenberger recovers known probabilities from noisy quotes (within 0.01 pp on a flat
   smile, 0.63 pp on a skewed one); and no strategy rule can see future prices (864 perturbation checks).
+
+### Result: Kalshi vs Polymarket (layer 6)
+
+Polymarket's daily "SPX up or down" market and Kalshi's S&P range ladder price the same event: from 2025-10-16
+both settle on the official close versus the previous close (Polymarket's first market, 2025-10-15, compared with
+the same day's open and is excluded). Over 103 trading days (Oct 2025 to Mar 2026, holdout excluded), the two
+venues' settlement data agree on all 113 outcomes.
+
+- **They agree.** Kalshi's probability, built from bids on its range ladder, tracks Polymarket's closely; the
+  average gap falls from 9 points six hours before the close to 4 points in the final hour.
+- **Neither forecasts better.** Brier scores are statistically tied at every hour (day-level bootstrap).
+- **No arbitrage.** A package guaranteed to pay $1 (Polymarket on one side, every Kalshi range on the other)
+  never cost less than $1.045, median $1.47. Kalshi has no single up/down contract, so the trade needs a basket
+  of about 17 range contracts, and their spreads cost about 40 cents.
+- **A methodology trap, caught.** Valuing Kalshi's ladder at bid-ask midpoints puts about 20% of probability in
+  far-out ranges nobody bids on, which drags estimates toward 50% and made Polymarket look more accurate near
+  the close. Using bids only removes the artifact; both versions are reported in `research/cross_venue.py`.
 
 ### Result: calibration (layer 4)
 
