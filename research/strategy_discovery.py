@@ -9,7 +9,7 @@
 # Run from the project root:  python3 research/strategy_discovery.py
 
 # %%
-import os, sys, itertools
+import os, sys
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 from robustness import sharpe, deflated_sharpe, pbo_cscv, probabilistic_sharpe
+from strategies import build_library
 
 PRICES = os.path.join(ROOT, "data", "history", "etf", "prices.csv.gz")
 OUT = os.path.join(ROOT, "research", "output", "strategy_discovery")
@@ -30,53 +31,11 @@ DRAWS = 400
 rng = np.random.default_rng(11)
 
 px = pd.read_csv(PRICES, index_col=0, parse_dates=True).dropna()
-ret = px.pct_change().iloc[1:]
 print(f"{len(px):,} days, {px.index[0].date()} to {px.index[-1].date()}, {px.shape[1]} ETFs")
 
-# %% The strategy library. Signals use data up to day t; positions are applied to day t+1's return.
-def momentum(p, look, skip):
-    return np.sign(p.shift(skip) / p.shift(look) - 1)
-
-def ma_cross(p, fast, slow):
-    return np.sign(p.rolling(fast).mean() - p.rolling(slow).mean())
-
-def mean_reversion(p, win, z):
-    s = (p - p.rolling(win).mean()) / p.rolling(win).std()
-    return -np.sign(s) * (s.abs() > z)
-
-def breakout(p, win):
-    hi, lo = p.rolling(win).max().shift(1), p.rolling(win).min().shift(1)
-    sig = pd.Series(np.nan, index=p.index)
-    sig[p > hi], sig[p < lo] = 1.0, -1.0
-    return sig.ffill()
-
-def rules():
-    for look, skip in itertools.product([5, 10, 20, 40, 60, 120, 180, 252], [0, 5, 21]):
-        if skip < look:
-            yield f"mom_{look}_{skip}", lambda p, a=look, b=skip: momentum(p, a, b)
-    for fast, slow in itertools.product([5, 10, 20, 50], [20, 50, 100, 200]):
-        if fast < slow:
-            yield f"ma_{fast}_{slow}", lambda p, a=fast, b=slow: ma_cross(p, a, b)
-    for win, z in itertools.product([5, 10, 20, 60], [0.5, 1.0, 1.5, 2.0]):
-        yield f"mr_{win}_{z}", lambda p, a=win, b=z: mean_reversion(p, a, b)
-    for win in [10, 20, 55, 100, 252]:
-        yield f"bo_{win}", lambda p, a=win: breakout(p, a)
-
-cols, names = [], []
-for tk in px.columns:
-    p, r = px[tk], ret[tk]
-    vol = (r.rolling(20).std() * np.sqrt(252)).reindex(r.index).bfill()
-    for name, fn in rules():
-        raw = fn(p).reindex(r.index).fillna(0.0)
-        for mode in ("ls", "lo"):                         # long/short, or long/flat
-            base = raw if mode == "ls" else raw.clip(lower=0)
-            for sizing in ("flat", "vt"):                 # fixed size, or scaled to a 15% annual volatility target
-                pos = base if sizing == "flat" else base * (0.15 / vol).clip(upper=2.0)
-                pos = pos.shift(1).fillna(0.0)            # trade on the next day's return: no look-ahead
-                pnl = pos * r - COST_BPS / 1e4 * pos.diff().abs().fillna(0.0)
-                cols.append(pnl.values)
-                names.append(f"{tk}:{name}:{mode}:{sizing}")
-R = pd.DataFrame(np.column_stack(cols), index=ret.index, columns=names)
+# %% The strategy library lives in strategies/: rules.py defines the signals, backtest.py turns them into
+# positions (shifted one day, so no look-ahead) and returns after costs. tests/test_no_lookahead.py proves it.
+R, ret = build_library(px, cost_bps=COST_BPS)
 R = R.loc[R.index >= R.index[260]]                         # drop the warm-up year
 ins_sd, oos_sd = R.loc[R.index < SPLIT].std(), R.loc[R.index >= SPLIT].std()
 dead = (ins_sd == 0) | (oos_sd == 0)                         # rules that never traded in one of the periods
@@ -139,7 +98,7 @@ ax.plot(curve.index, curve.oos_mean, "o-", color="#4a6fa5", label="its out-of-sa
 ax.fill_between(curve.index, curve.oos_p10, curve.oos_p90, color="#4a6fa5", alpha=.15, label="out-of-sample 10th–90th pct")
 ax.axhline(bh, color="#555", ls="--", lw=1, label="SPY buy-and-hold OOS")
 ax.set_xscale("log"); ax.set_xlabel("Number of strategies searched"); ax.set_ylabel("Annualized Sharpe")
-ax.set_title("Searching harder makes the backtest look better"); ax.legend(frameon=False, fontsize=8)
+ax.set_title("Search harder: the backtest improves, the strategy gets worse"); ax.legend(frameon=False, fontsize=8)
 ax = axes[2]
 ax.hist(res["logits"], bins=40, color="#4a6fa5", alpha=.8)
 ax.axvline(0, color="#b8520a", lw=1.5)

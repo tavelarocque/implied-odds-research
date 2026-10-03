@@ -12,6 +12,33 @@ where, when and why they disagree. Every claimed edge goes through one shared ro
 | Strategy discovery | `research/strategy_discovery.py` | Search 2,120 rule-based strategies on SPY and nine sector ETFs: how much of the best backtest survives out of sample? |
 | Implied Odds | `research/calibration.py` and later phases | Are Kalshi's S&P contracts calibrated, and do they agree with option-implied probabilities? |
 
+## Code map
+
+```
+implied-odds/
+├── robustness/          Layer 2: is a result real or luck?
+│   └── overfitting.py     deflated Sharpe, probabilistic Sharpe, PBO via CSCV, minimum track record
+├── strategies/          Layer 3's library
+│   ├── rules.py           momentum, moving-average cross, mean reversion, breakout
+│   └── backtest.py        signals -> positions (shifted a day) -> returns after costs
+├── implied/             Layer 5: option-implied probabilities
+│   └── bl.py              forward from put-call parity, SVI smile fit, Breeden-Litzenberger probabilities
+├── collect/             Layer 1: data
+│   ├── options_snapshot.py, kalshi_snapshot.py, run_snapshot.sh   live snapshots every 30 min
+│   ├── kalshi_history.py, polymarket_history.py, etf_prices.py    history pullers
+│   ├── intraday.py        daily one-minute S&P prices for layer 7
+│   ├── validate_kalshi.py data checks
+│   └── status.sh          download progress
+├── research/            one script per study; each writes to research/output/
+│   ├── config.py          the locked holdout
+│   ├── strategy_discovery.py, calibration.py, fair_value_snapshot.py
+├── tests/               python3 run_tests.py runs them all
+└── notebooks/tour.ipynb a guided walk through the code
+```
+
+Start with `notebooks/tour.ipynb`. Every research script is also split into `# %%` cells, so VS Code can run
+it cell by cell like a notebook.
+
 ### Research discipline
 
 - **Locked holdout.** Kalshi data from 2026-04-01 onward is reserved for the final test of any trading rule
@@ -19,8 +46,9 @@ where, when and why they disagree. Every claimed edge goes through one shared ro
 - **Data checks.** `collect/validate_kalshi.py` confirms no duplicate contracts, one winner per trading day
   (2 of 1,131 days fail and are excluded), and that every Kalshi settlement value matches the S&P 500 close
   (1,126 of 1,126 within 5 cents).
-- **Tested tools.** `python3 -m tests.test_overfitting` checks that the robustness layer rejects pure noise
-  and finds a planted edge.
+- **Tested tools.** `python3 run_tests.py` runs three tests: the robustness layer rejects pure noise and finds a
+  planted edge; Breeden-Litzenberger recovers known probabilities from noisy quotes (within 0.01 pp on a flat
+  smile, 0.63 pp on a skewed one); and no strategy rule can see future prices (864 perturbation checks).
 
 ### Result so far: strategy discovery
 
