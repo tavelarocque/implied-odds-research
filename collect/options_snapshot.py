@@ -4,12 +4,13 @@ Keeps only short-dated expiries, which are the ones that line up with Kalshi's d
 S&P 500 contracts and are what Breeden-Litzenberger needs. Each row is one option quote; the first
 row is a header record with the underlying price and the feed timestamp.
 """
-import re, sys
+import os, re, sys
 from datetime import date, datetime
 from common import get_json, now_utc, out_path, write_jsonl_gz
 
 URL = "https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json"
-MAX_DAYS = 14          # keep expiries up to two weeks out
+MAX_DAYS = int(os.environ.get("SNAP_MAX_DAYS", 14))          # keep expiries up to two weeks out
+MAX_MONEYNESS = float(os.environ.get("SNAP_MAX_MONEYNESS", 0) or 0)  # e.g. 0.08 keeps strikes within 8% of spot; 0 keeps all
 OCC = re.compile(r"^(SPXW?)(\d{6})([CP])(\d{8})$")
 FIELDS = ["bid", "ask", "bid_size", "ask_size", "iv", "open_interest", "volume", "delta", "gamma",
           "vega", "theta", "theo", "last_trade_price", "last_trade_time", "prev_day_close"]
@@ -32,6 +33,8 @@ def main():
         exp = date(2000 + int(ymd[:2]), int(ymd[2:4]), int(ymd[4:]))
         dte = (exp - today).days
         if dte < 0 or dte > MAX_DAYS:
+            continue
+        if MAX_MONEYNESS and d.get("current_price") and abs(int(strike) / 1000 / d["current_price"] - 1) > MAX_MONEYNESS:
             continue
         row = {"type": "option", "symbol": o["option"], "root": root, "expiry": exp.isoformat(),
                "dte": dte, "cp": cp, "strike": int(strike) / 1000}
