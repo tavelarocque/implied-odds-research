@@ -3,16 +3,14 @@
 Kalshi's API also serves historical candlesticks for settled markets, so these live snapshots mainly
 give us quotes taken at the same moment as the options snapshot, which history alone can't.
 """
-import sys, urllib.parse
+import os, sys, urllib.parse
 from common import get_json, now_utc, out_path, write_jsonl_gz
 
 BASE = "https://api.elections.kalshi.com/trade-api/v2"
-SERIES = [
-    "KXINX",     # S&P 500 daily close range
-    "KXINXU",    # S&P 500 above/below
-    "KXINXW",    # S&P 500 weekly range
-    "KXNASDAQ100", "KXNASDAQ100U",
-]
+# The daily range ladders are what get matched against options; the hourly above/below series (KXINXU,
+# KXNASDAQ100U, about 3,200 open contracts) are left out to keep a year of cloud snapshots small.
+# Override with KALSHI_SERIES="KXINX,KXINXU,..." to collect others.
+SERIES = [s.strip() for s in os.environ.get("KALSHI_SERIES", "KXINX,KXINXW,KXNASDAQ100").split(",") if s.strip()]
 DROP = {"rules_primary", "rules_secondary", "subtitle", "yes_sub_title", "no_sub_title",
         "early_close_condition", "custom_strike", "mve_selected_legs", "price_ranges"}
 
