@@ -2,7 +2,32 @@
 
 Do prediction markets and options markets agree on the odds of the same event? This project compares
 Kalshi's S&P 500 and Nasdaq-100 contracts against probabilities implied by SPX option prices, and studies
-where, when and why they disagree.
+where, when and why they disagree. Every claimed edge goes through one shared robustness layer.
+
+## Layers
+
+| Layer | Folder | Question |
+|---|---|---|
+| Robustness | `robustness/` | Is a backtest result real, or the luckiest of many tries? Deflated Sharpe ratio, probability of backtest overfitting (CSCV), minimum track record length. Tested in `tests/`. |
+| Strategy discovery | `research/strategy_discovery.py` | Search 2,120 rule-based strategies on SPY and nine sector ETFs: how much of the best backtest survives out of sample? |
+| Implied Odds | `research/calibration.py` and later phases | Are Kalshi's S&P contracts calibrated, and do they agree with option-implied probabilities? |
+
+### Research discipline
+
+- **Locked holdout.** Kalshi data from 2026-04-01 onward is reserved for the final test of any trading rule
+  or model. It was fixed on 2026-10-03, before any calibration result was seen (`research/config.py`).
+- **Data checks.** `collect/validate_kalshi.py` confirms no duplicate contracts, one winner per trading day
+  (2 of 1,131 days fail and are excluded), and that every Kalshi settlement value matches the S&P 500 close
+  (1,126 of 1,126 within 5 cents).
+- **Tested tools.** `python3 -m tests.test_overfitting` checks that the robustness layer rejects pure noise
+  and finds a planted edge.
+
+### Result so far: strategy discovery
+
+Searching harder makes the in-sample winner look better and perform worse. Picking the best of 1,000 rules
+by 2000–2012 Sharpe gives an average in-sample Sharpe of 1.02 and an out-of-sample (2013–2026) Sharpe of 0.05,
+against 0.92 for simply holding SPY. The single best rule (a consumer-staples mean-reversion rule, in-sample 1.06)
+lost money out of sample; its deflated Sharpe of 0.70 had already flagged it as not significant.
 
 ## Research plan
 

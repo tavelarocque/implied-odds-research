@@ -39,6 +39,10 @@ def read_jsonl(path):
 mk = pd.DataFrame(read_jsonl(os.path.join(HIST, f"markets_{SERIES}.jsonl.gz")))
 mk = mk[mk["result"].isin(["yes", "no"])].copy()
 mk["y"] = (mk["result"] == "yes").astype(int)
+wins = mk.groupby("event_ticker")["y"].transform("sum")
+dropped = mk.loc[wins != 1, "event_ticker"].nunique()
+mk = mk[wins == 1].copy()                     # a ladder must have exactly one winner; drop voided or anomalous days
+print(f"dropped {dropped} trading days without exactly one winning contract")
 mk["close_ts"] = mk["close_time"].map(lambda s: int(datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()))
 print(f"{len(mk):,} settled markets across {mk.event_ticker.nunique():,} trading days")
 
@@ -77,6 +81,12 @@ for m in mk.itertuples():
 print(f"candle files missing for {missing:,} markets (pull them with collect/kalshi_history.py candles)")
 
 q = pd.DataFrame(rows)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from config import exploratory, FINAL_TEST_START, HOLDOUT_UNLOCKED
+if not q.empty:
+    keep = exploratory(q["date"])
+    print(f"holdout: using {keep.sum():,} of {len(q):,} quotes" + ("" if HOLDOUT_UNLOCKED else f" (data from {FINAL_TEST_START} reserved)"))
+    q = q[keep]
 if q.empty:
     sys.exit("No usable quotes yet: pull hourly candles first (collect/kalshi_history.py candles --period 60 --series KXINX).")
 q = q[(q.bid > 0) & (q.ask < 1) & (q.ask > q.bid) & (q.ask - q.bid <= MAX_SPREAD)].copy()
