@@ -45,11 +45,16 @@ def find_events(start, end):
             for l in f:
                 r = json.loads(l)
                 have[r["slug"]] = r
+    # Slugs that returned nothing for a date more than a week old will never appear (markets aren't listed
+    # retroactively), so remember them instead of asking again every Sunday.
+    miss_path = os.path.join(OUT, "no_market_slugs.txt")
+    misses = set(open(miss_path).read().split()) if os.path.exists(miss_path) else set()
+    settled_before = (date.today() - timedelta(days=7)).isoformat()
     checked = found = 0
     for d in weekdays(start, end):
         for kind, pat in KINDS.items():
             slug = pat.format(d=slug_date(d))
-            if slug in have:
+            if slug in have or slug in misses:
                 continue
             checked += 1
             try:
@@ -59,6 +64,8 @@ def find_events(start, end):
                 continue
             time.sleep(PAUSE)
             if not evs:
+                if d.isoformat() < settled_before:
+                    misses.add(slug)
                 continue
             e = evs[0]
             for m in e.get("markets", []):
@@ -76,6 +83,8 @@ def find_events(start, end):
     with gzip.open(path, "wt", encoding="utf-8") as f:
         for r in sorted(have.values(), key=lambda r: (r["date"], r["kind"])):
             f.write(json.dumps(r, separators=(",", ":")) + "\n")
+    with open(miss_path, "w") as f:
+        f.write("\n".join(sorted(misses)) + "\n")
     dates = sorted(r["date"] for r in have.values())
     print(f"checked {checked} new slugs, found {found} new markets; {len(have)} total"
           + (f", {dates[0]} to {dates[-1]}" if dates else ""))
