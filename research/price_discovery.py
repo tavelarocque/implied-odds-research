@@ -32,7 +32,13 @@ K_HIST = os.path.join(ROOT, "data", "history", "kalshi")
 P_HIST = os.path.join(ROOT, "data", "history", "polymarket")
 INDEX = sys.argv[1] if len(sys.argv) > 1 else "spx"
 SERIES, POLY_KIND, NAME = {"spx": ("KXINX", "close", "S&P 500"), "ndx": ("KXNASDAQ100", "ndx_close", "Nasdaq-100")}[INDEX]
-OUT = os.path.join(ROOT, "research", "output", f"price_discovery_{INDEX}")
+# ALIGN=poly (correction, added after the pre-registered run): Polymarket's history is stamped a few seconds after each
+# 10-minute mark (e.g. 14:10:10), so the pre-registered rule "last price at or before each grid time" on a grid sitting
+# exactly on the marks always picked the price from ~9.8 minutes earlier, making Polymarket look a full step behind.
+# research/diag_poly_timing.py shows the venues are in sync at the true stamps. With ALIGN=poly the grid IS Polymarket's
+# own stamps and Kalshi is read at exactly those moments; nothing else changes.
+ALIGN = os.environ.get("ALIGN", "grid")
+OUT = os.path.join(ROOT, "research", "output", f"price_discovery_{INDEX}" + ("_aligned" if ALIGN == "poly" else ""))
 os.makedirs(OUT, exist_ok=True)
 GRID_MIN = list(range(360, 19, -10))          # minutes before the close: 360, 350, ..., 20
 POLY_MAX_AGE = 600                            # a Polymarket price older than 10 minutes counts as missing
@@ -117,8 +123,12 @@ for e in pm.itertuples():
             cs = json.load(f)["candlesticks"]
         candles[m.ticker] = (np.array([c["end_period_ts"] for c in cs]), cs) if cs else None
     close_ts = ts(d.close_time)
-    for mins in GRID_MIN:
-        target = close_ts - mins * 60
+    if ALIGN == "poly":
+        targets = [int(t) for t in pu[0] if close_ts - 360 * 60 - 300 <= t <= close_ts - 20 * 60 + 300]
+    else:
+        targets = [close_ts - m * 60 for m in GRID_MIN]
+    for target in targets:
+        mins = (close_ts - target) / 60
         q = []
         for m in lad_ms.itertuples():
             c = candles.get(m.ticker)
@@ -129,7 +139,7 @@ for e in pm.itertuples():
         lad = make_ladder(q)
         i = np.searchsorted(pu[0], target, side="right") - 1
         p_poly = pu[1][i] if i >= 0 and target - pu[0][i] <= POLY_MAX_AGE else np.nan
-        rows.append({"date": e.date, "mins": mins, "p_poly": p_poly,
+        rows.append({"date": e.date, "mins": mins, "slot": int(round(mins / 10)), "p_poly": p_poly,
                      "p_k": prob_above(lad, d.prev_close, "bid"), "p_k_mid": prob_above(lad, d.prev_close, "mid")})
 
 panel = pd.DataFrame(rows).sort_values(["date", "mins"], ascending=[True, False]).reset_index(drop=True)
@@ -189,13 +199,13 @@ def analyse(df, x, label, perms=0):
         d = df.dropna(subset=[x, "dK", "dP"])
         dates = d.date.unique()
         by_day = {k: v for k, v in d.groupby("date")}
-        full = df.set_index(["date", "mins"])
+        full = df.drop_duplicates(["date", "slot"]).set_index(["date", "slot"])
         null = []
         for _ in range(perms):
             perm = dict(zip(dates, rng.permutation(dates)))
             xs, ks, ps = [], [], []
             for a, g in by_day.items():
-                other = full.loc[perm[a]].reindex(g.mins.values)
+                other = full.loc[perm[a]].reindex(g.slot.values)
                 ok = other.dK.notna().values & other.dP.notna().values
                 xs.append(g[x].values[ok]); ks.append(other.dK.values[ok]); ps.append(other.dP.values[ok])
             X, Kc, Pc = np.concatenate(xs), np.concatenate(ks), np.concatenate(ps)

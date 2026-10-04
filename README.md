@@ -145,6 +145,34 @@ by 2000–2012 Sharpe gives an average in-sample Sharpe of 1.02 and an out-of-sa
 against 0.92 for simply holding SPY. The single best rule (a consumer-staples mean-reversion rule, in-sample 1.06)
 lost money out of sample; its deflated Sharpe of 0.70 had already flagged it as not significant.
 
+### Result: who leads price discovery, Kalshi or Polymarket? (layer 3, pre-registered)
+
+`research/PREREGISTRATION_LAYER3.md` was committed (2026-10-04 12:12) before any minute-level result. When the venues
+disagree about "will the index close above yesterday's close?", which one moves to meet the other? Regress each venue's
+next 10-minute change on the gap 10 minutes earlier (lagged so quote noise can't fake a follower); Kalshi's share of
+the adjustment above 0.5 means Polymarket leads. Data: 1-minute Kalshi candles (14,580 contracts), Polymarket's
+10-minute history, 113 days per index before the holdout.
+
+| | S&P 500 | Nasdaq-100 |
+|---|---|---|
+| Gap closes (bK - bP, 95% interval) | 0.084 (0.046 to 0.127) | 0.098 (0.058 to 0.153) |
+| Permutation p (1,000 day shuffles) | 0.001 | 0.001 |
+| Kalshi's share of the adjustment | 0.42 (-0.09 to 0.76) | 0.53 (0.05 to 0.82) |
+| **Verdict** | **no detectable leader** | **no detectable leader** |
+| Implied half-life of a disagreement | about 80 minutes | about 70 minutes |
+
+Both venues move toward each other in roughly equal measure. The prediction that Kalshi would lead on the thin
+Polymarket Nasdaq market was not supported. Table shows the alignment-corrected run.
+
+**An alignment error, found and fixed.** The pre-registered run gave the same verdicts (shares 0.42 and 0.49), but its
+lead-lag table was wrong: the venues' changes were uncorrelated in the same window (0.02) and strongly correlated with
+a 10-minute shift (0.66). Two venues on the same index shouldn't behave that way. `research/diag_poly_timing.py` checked
+alignment minute by minute and found Polymarket's prices stamped a few seconds after each 10-minute mark, so the
+pre-registered rule "last price at or before each grid time" always picked the price from about 9.8 minutes earlier.
+The corrected run (`ALIGN=poly`) reads Kalshi at Polymarket's exact stamps and changes nothing else; same-window
+correlation becomes 0.66 (S&P) and 0.53 (Nasdaq). At minute resolution Kalshi may lead by up to a minute, which
+10-minute Polymarket data can't resolve.
+
 ### Result: Masters' permutation tests (layer 2, third method)
 
 `robustness/permutation.py` adds Timothy Masters' Monte Carlo permutation tests. They shuffle the order of daily
