@@ -129,6 +129,15 @@ consistent with a small edge, not yet shown; the live snapshots keep counting, a
 bound that falls below 0.93%, which needs several hundred more contracts. Lesson for future pre-registrations: for
 rare-loss strategies, set the bar on the loss rate, not on a bootstrap of the mean.
 
+**Post hoc: why Kalshi beat Polymarket on the Nasdaq-100** (`research/posthoc_venue_accuracy.py`; added after the
+results were seen, so it explains and does not test). Polymarket's Nasdaq market is about 20 times thinner than its
+S&P market: median volume $7,316 per day vs $143,222. Its price moves on 74% of 10-minute steps in the last six hours,
+vs 86% for the S&P. Pooled over horizons, Kalshi's Brier score is 0.078 vs Polymarket's 0.092 on the Nasdaq
+(difference -0.014, 95% interval -0.021 to -0.006); on the S&P the two are tied (+0.002, -0.007 to +0.011). Within the
+Nasdaq, Polymarket's busier days don't close the gap (-0.013 vs -0.016 on quieter days), but even its busier Nasdaq days
+are far thinner than a typical S&P day, so that split can't separate the explanations. Reading: thin markets price
+less accurately, which is consistent with the data but not proven by it.
+
 ### Result so far: strategy discovery
 
 Searching harder makes the in-sample winner look better and perform worse. Picking the best of 1,000 rules
