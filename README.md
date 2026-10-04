@@ -46,8 +46,18 @@ it cell by cell like a notebook.
   or model. It was fixed on 2026-10-03, before any calibration result was seen (`research/config.py`).
 - **Data checks.** `collect/validate_kalshi.py` confirms no duplicate contracts, one winner per trading day
   (2 of 1,131 days fail and are excluded), and that every Kalshi settlement value matches the S&P 500 close
-  (1,126 of 1,126 within 5 cents).
-- **Tested tools.** `python3 run_tests.py` runs four tests, including the Kalshi ladder maths (exact on range
+  (1,126 of 1,126 within 5 cents). Run with `KXNASDAQ100`, it checks the Nasdaq-100 history the same way: 1 of 1,146
+  days excluded, 1,137 of 1,139 settlements match ^NDX within 5 cents.
+- **Live snapshot checks.** `collect/check_snapshots.py --cloud` inspects the latest cloud snapshot of every kind:
+  crossed quotes, option-smile fits that integrate to one with no negative mass, Kalshi ladders that are contiguous
+  and can't be bought or sold as a whole for free, sorted Polymarket books. It also lines the three sources up on the
+  same moment (option-implied probabilities against Kalshi bid-ask and the Polymarket Up price). Its first run caught
+  the Nasdaq option fit failing: see `tests/test_sparse_wing.py`.
+- **Tested tools.** The fifth test, `test_sparse_wing`, rebuilds a real failure: Nasdaq upside calls are cheap
+  with wide spreads, so the smile was fitted with almost no upside quotes and bent into an impossible density (mass
+  2.2). The fit now penalizes butterfly arbitrage (Durrleman's condition), Lee's wing bound and negative variance
+  across the whole range probabilities are read from, and the forward survives a parity slope just above 1.
+- **More on tests.** `python3 run_tests.py` runs five tests, including the Kalshi ladder maths (exact on range
   boundaries, within 0.16 pp between them, correct basket costs and fees). The other three: the robustness layer rejects pure noise and finds a
   planted edge; Breeden-Litzenberger recovers known probabilities from noisy quotes (within 0.01 pp on a flat
   smile, 0.63 pp on a skewed one); and no strategy rule can see future prices (864 perturbation checks).

@@ -20,7 +20,10 @@ echo; echo "== Polymarket: new daily S&P markets and their prices"
 $PY polymarket_history.py events --start 2025-01-01
 $PY polymarket_history.py prices --fidelity 10
 echo; echo "== Data checks"
-$PY validate_kalshi.py 2>/dev/null | grep -v -i warn
+$PY validate_kalshi.py KXINX 2>/dev/null | grep -v -i warn
+$PY validate_kalshi.py KXNASDAQ100 2>/dev/null | grep -v -i warn
+echo; echo "== Latest snapshots (options, Kalshi, Polymarket)"
+(cd .. && $PY collect/check_snapshots.py 2>/dev/null | tail -12)
 echo; echo "== Live snapshots captured, last 10 days (about 18 per weekday from the cloud, plus any from the Mac)"
 for d in $(ls ../data/raw/spx_options 2>/dev/null | tail -10); do
   n=$(ls ../data/raw/spx_options/$d 2>/dev/null | wc -l | tr -d ' ')

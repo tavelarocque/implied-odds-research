@@ -51,25 +51,48 @@ def implied_vol(price, F, K, T, DF, is_call):
 
 
 # ---------- Step 1: forward and discount factor ----------
-def estimate_forward(strikes, call_mid, put_mid, spot_guess=None, window=0.04):
-    """Regress C - P on K over strikes near the money: intercept = DF*F, slope = -DF."""
+def estimate_forward(strikes, call_mid, put_mid, spot_guess=None, window=0.04, weights=None, T=None):
+    """Regress C - P on K over strikes near the money: intercept = DF*F, slope = -DF.
+
+    weights: one per strike (1 / bid-ask spread), so wide quotes count less.
+    For short expiries the slope is barely identified: DF is about 0.9998 for 2 days, and a few points of quote
+    noise can push the fitted slope past 1. When that happens and T is known, DF is clamped to its plausible range
+    (rates between 0% and 20%) and the forward is taken from parity strike by strike, F = K + (C - P) / DF, as a
+    weighted median. The error from that clamp is about r*T, which is negligible for probabilities."""
     K = np.asarray(strikes, float)
     y = np.asarray(call_mid, float) - np.asarray(put_mid, float)
-    ok = np.isfinite(y)
+    w = np.ones_like(K) if weights is None else np.asarray(weights, float)
+    ok = np.isfinite(y) & np.isfinite(w)
     if spot_guess is not None:
         ok &= np.abs(K / spot_guess - 1) < window
     if ok.sum() < 3:
         raise ValueError("not enough call/put pairs near the money to estimate the forward")
-    slope, intercept = np.polyfit(K[ok], y[ok], 1)
+    slope, intercept = np.polyfit(K[ok], y[ok], 1, w=w[ok])
     DF = -slope
-    if not (0.9 < DF <= 1.0005):
+    if 0.9 < DF <= 1.0005:
+        return intercept / DF, min(DF, 1.0)
+    if T is None:
         raise ValueError(f"implausible discount factor {DF:.5f} from put-call parity")
-    return intercept / DF, min(DF, 1.0)
+    DF = float(np.clip(DF, math.exp(-0.20 * T), 1.0))
+    f = K[ok] + y[ok] / DF
+    order = np.argsort(f)
+    cw = np.cumsum(w[ok][order])
+    return float(f[order][np.searchsorted(cw, cw[-1] / 2)]), DF
 
 
 # ---------- Step 3: SVI smile ----------
 def svi_total_variance(k, a, b, rho, m, s):
     return a + b * (rho * (k - m) + np.sqrt((k - m) ** 2 + s ** 2))
+
+
+def svi_durrleman_g(k, a, b, rho, m, s):
+    """Durrleman's condition: the density implied by a total-variance smile w(k) is non-negative iff g(k) >= 0."""
+    x = k - m
+    r = np.sqrt(x ** 2 + s ** 2)
+    w = np.maximum(a + b * (rho * x + r), 1e-12)
+    w1 = b * (rho + x / r)
+    w2 = b * s ** 2 / r ** 3
+    return (1 - k * w1 / (2 * w)) ** 2 - (w1 ** 2 / 4) * (1 / w + 0.25) + w2 / 2
 
 
 class Surface:
@@ -123,7 +146,7 @@ def fit_surface(strikes, call_mid, put_mid, T, spot_guess=None, weights=None):
     weights: one per strike, ideally 1 / bid-ask spread (a quote's precision). Defaults to equal weights."""
     K = np.asarray(strikes, float)
     C, P = np.asarray(call_mid, float), np.asarray(put_mid, float)
-    F, DF = estimate_forward(K, C, P, spot_guess=spot_guess)
+    F, DF = estimate_forward(K, C, P, spot_guess=spot_guess, weights=weights, T=T)
     # Out-of-the-money side only: puts below the forward, calls above.
     iv = np.array([implied_vol(C[i], F, K[i], T, DF, True) if K[i] >= F else implied_vol(P[i], F, K[i], T, DF, False)
                    for i in range(len(K))])
@@ -133,9 +156,22 @@ def fit_surface(strikes, call_mid, put_mid, T, spot_guess=None, weights=None):
     k, w = np.log(K[ok] / F), iv[ok] ** 2 * T
     wt = np.ones_like(w) if weights is None else np.asarray(weights, float)[ok]
 
+    # Check for arbitrage well beyond the quotes: probabilities get read off the extrapolated wings too.
+    kg = np.linspace(min(k.min() - 0.2, -0.5), max(k.max() + 0.2, 0.5), 400)
+
+    def arb_penalty(p):
+        # Butterfly arbitrage (a negative density) shows up as Durrleman's g(k) < 0, and wings steeper than
+        # Roger Lee's bound b(1 + |rho|) <= 2 break the tails. Both are penalized so the fit stays a real density.
+        g = svi_durrleman_g(kg, *p)
+        a, b, rho, m, s_ = p
+        w_min = a + b * s_ * math.sqrt(max(1 - rho ** 2, 0.0))     # lowest total variance on the smile
+        return np.concatenate([1e3 * np.minimum(g, 0.0), [1e3 * max(b * (1 + abs(rho)) - 2.0, 0.0),
+                                                           1e3 * max(-w_min, 0.0) / max(w.mean(), 1e-12)]])
+
     def resid(p):
         a, b, rho, m, s = p
-        return wt * (svi_total_variance(k, a, b, rho, m, s) - w) / max(w.mean(), 1e-12)
+        fit = wt * (svi_total_variance(k, a, b, rho, m, s) - w) / max(w.mean(), 1e-12)
+        return np.concatenate([fit, arb_penalty(p)])
 
     x0 = [max(w.min() * 0.5, 1e-8), 0.1 * w.mean() / max(np.std(k), 1e-4), -0.5, 0.0, max(np.std(k), 1e-3)]
     lb = [-w.max(), 1e-8, -0.999, k.min() - 0.5, 1e-5]
@@ -156,7 +192,7 @@ def fit_surface(strikes, call_mid, put_mid, T, spot_guess=None, weights=None):
     def resid_px(p):
         sig = np.sqrt(np.maximum(svi_total_variance(k, *p), 1e-10) / T)
         model = np.where(is_call, black_call(F, Kok, T, sig, DF), black_put(F, Kok, T, sig, DF))
-        return wt * (model - otm_px)
+        return np.concatenate([wt * (model - otm_px), arb_penalty(p)])
 
     best = least_squares(resid_px, best.x, bounds=(lb, ub), max_nfev=5000)
     a, b, rho, m, s = best.x
@@ -177,5 +213,9 @@ def surface_from_snapshot(options, expiry, T, spot_guess=None, root="SPXW", max_
     df = df[(df.ask - df.bid) / df.mid <= max_rel_spread]
     wide = df.pivot_table(index="strike", columns="cp", values="mid", aggfunc="mean").dropna()
     spr = df.assign(spread=df.ask - df.bid).pivot_table(index="strike", columns="cp", values="spread", aggfunc="mean").reindex(wide.index)
-    weights = 1.0 / spr.mean(axis=1).clip(lower=0.05).values      # a quote is as precise as its spread
+    # A quote is as precise as its spread. The smile is fitted to the out-of-the-money side, so use that side's
+    # spread; averaging in a deep in-the-money spread (often tens of dollars on NDX) would bury a clean quote.
+    ref = spot_guess if spot_guess is not None else float(np.median(wide.index.values))
+    otm_spread = np.where(wide.index.values >= ref, spr["C"].values, spr["P"].values)
+    weights = 1.0 / np.clip(otm_spread, 0.05, None)
     return fit_surface(wide.index.values, wide["C"].values, wide["P"].values, T, spot_guess=spot_guess, weights=weights)
