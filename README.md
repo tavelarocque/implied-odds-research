@@ -89,6 +89,32 @@ meaning cheap contracts win slightly less often than priced. It is too small to 
 for a taker after the bid-ask spread and Kalshi's fee. The bias was strongest in 2022 (slope 1.44 at one hour) and
 has faded toward 1.0 since 2024, consistent with a market that became more efficient as it grew.
 
+### Result: Nasdaq-100 replication (pre-registered)
+
+Both studies were rerun on the Nasdaq-100 with the series switched and nothing else changed. The pass criteria were
+committed in `research/PREREGISTRATION.md` before any Nasdaq result existed. **4 of 6 criteria pass; 2 fail.**
+
+| Criterion | Nasdaq-100 | Verdict |
+|---|---|---|
+| Calibration: slope b > 1 at 1h or 3h, 95% interval excluding 1 | 1h: 1.07 (0.99 to 1.15); 3h: 1.09 (1.01 to 1.17) | Pass (3h) |
+| Calibration: no price bucket profitable for a taker after spread and fees | Selling the 0 to 2 cent long shots 1h before the close: +0.72 cents per contract (0.13 to 0.93), 473 quotes | **Fail** |
+| Calibration: 2025-26 1h slope closer to 1 than 2022 | 2022: 1.38; 2025: 0.94; 2026: 0.99 | Pass |
+| Cross-venue: bids-only gap smaller at 1h than 6h | 6.8pp vs 11.1pp (lowest at 2h, 5.0pp) | Pass |
+| Cross-venue: no significant Brier difference at any horizon | Bids-only Kalshi is significantly more accurate at 1h (Brier 0.033 vs 0.058) and 4h | **Fail** |
+| Cross-venue: no package paying $1 costs under $1 after fees | Cheapest $1.07, median $1.45, never under $1 | Pass |
+
+Data: 1,146 Kalshi trading days (1 excluded, 1,137 of 1,139 settlements match ^NDX); 386 matched cross-venue
+observations over 98 days; Polymarket's outcome agrees with Kalshi's settlement on 113 of 113 days.
+
+How to read the failures:
+- *The profitable bucket* is small and may be chance. The study tests about 100 bucket, side and horizon
+  combinations, so a few would clear a 95% bar by luck; the S&P study found none. It is now a specific, written-down
+  hypothesis (sell Nasdaq contracts priced under 2 cents one hour before the close), and the untouched holdout from
+  2026-04-01 is where it gets one clean test.
+- *The accuracy difference* goes the opposite way to the S&P midpoint artifact: with the bids-only estimator, Kalshi's
+  Nasdaq ladder beat Polymarket's single up/down market at two of six horizons. Both venues still price the same
+  information within a few points and leave no arbitrage, which is the core layer-6 finding, and that replicated.
+
 ### Result so far: strategy discovery
 
 Searching harder makes the in-sample winner look better and perform worse. Picking the best of 1,000 rules
