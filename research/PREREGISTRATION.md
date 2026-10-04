@@ -26,3 +26,24 @@ Cross-venue replicates if all three hold:
 
 Any criterion that fails is reported as a failure, with the numbers, in the README. Nothing in the method
 (horizons, filters, estimators, fees) changes after the Nasdaq results are seen.
+
+
+## Addendum: one holdout test (written 2026-10-03, before the holdout was opened)
+
+The Nasdaq-100 calibration found one price bucket that made money for a taker, against the pre-registered
+criteria. It may be chance: the study checks about 100 bucket, side and horizon combinations. It gets exactly one
+test on the locked holdout (2026-04-01 onward), which no analysis has used. The rule and the bar are fixed here,
+the script (`research/holdout_longshot.py`) is committed with this text, and neither changes after the run.
+
+**Rule.** One hour before the 4pm ET close, take every KXNASDAQ100 range contract whose hourly quote is no more than
+an hour old, has a bid above 0, an ask below $1 and a spread of 10 cents or less, and whose bid-ask midpoint is
+2 cents or less. Sell YES at the bid (buy NO). Profit per contract = bid - outcome - 0.07 x bid x (1 - bid).
+Same filters, prices and fee formula as `research/calibration.py`.
+
+**Pass.** The mean profit per contract is above zero with a 95% interval, resampling whole trading days
+(2,000 resamples), that excludes zero. Anything else is a fail, and the result is reported in the README
+either way.
+
+**Also reported, not part of pass or fail:** the same profit with Kalshi's fee rounded up to a cent per order of
+100 contracts; the number of contracts that settled YES (each loses about 99 cents); and the profit per trading day
+from selling one contract of every qualifying range.
