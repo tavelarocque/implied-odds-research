@@ -115,6 +115,20 @@ How to read the failures:
   Nasdaq ladder beat Polymarket's single up/down market at two of six horizons. Both venues still price the same
   information within a few points and leave no arbitrage, which is the core layer-6 finding, and that replicated.
 
+**Holdout test of the long-shot rule (run once, 2026-10-03).** The rule and pass bar were committed
+(`research/PREREGISTRATION.md`, addendum) before the holdout was opened; `research/holdout_longshot.py` ran it.
+195 qualifying contracts over 91 trading days (April to October 2026), all with a 1 cent bid; **none settled YES**.
+Every trade earned the same +0.93 cents, so by the letter of the pre-registered bar it **passes**.
+
+That verdict is weaker than it looks, and the bar I wrote is why. With zero losses, a bootstrap has no variation to
+resample, so its interval collapses to a single point. The real question is the hit rate: the rule breaks even if
+more than 0.93% of these contracts settle YES, and 0 hits in 195 only bounds the true rate below 1.87% (exact 95%
+interval). So the holdout cannot rule out a losing rule. Before the holdout the rate was 1 in 473. This is the
+classic short-option profile: steady pennies, rare 99-cent losses, and a sample too small to see the tail. Verdict:
+consistent with a small edge, not yet shown; the live snapshots keep counting, and the right test is a hit-rate
+bound that falls below 0.93%, which needs several hundred more contracts. Lesson for future pre-registrations: for
+rare-loss strategies, set the bar on the loss rate, not on a bootstrap of the mean.
+
 ### Result so far: strategy discovery
 
 Searching harder makes the in-sample winner look better and perform worse. Picking the best of 1,000 rules
