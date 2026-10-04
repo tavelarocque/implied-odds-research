@@ -57,7 +57,7 @@ it cell by cell like a notebook.
   with wide spreads, so the smile was fitted with almost no upside quotes and bent into an impossible density (mass
   2.2). The fit now penalizes butterfly arbitrage (Durrleman's condition), Lee's wing bound and negative variance
   across the whole range probabilities are read from, and the forward survives a parity slope just above 1.
-- **More on tests.** `python3 run_tests.py` runs five tests, including the Kalshi ladder maths (exact on range
+- **More on tests.** `python3 run_tests.py` runs six tests, including the Kalshi ladder maths (exact on range
   boundaries, within 0.16 pp between them, correct basket costs and fees). The other three: the robustness layer rejects pure noise and finds a
   planted edge; Breeden-Litzenberger recovers known probabilities from noisy quotes (within 0.01 pp on a flat
   smile, 0.63 pp on a skewed one); and no strategy rule can see future prices (864 perturbation checks).
@@ -144,6 +144,39 @@ Searching harder makes the in-sample winner look better and perform worse. Picki
 by 2000–2012 Sharpe gives an average in-sample Sharpe of 1.02 and an out-of-sample (2013–2026) Sharpe of 0.05,
 against 0.92 for simply holding SPY. The single best rule (a consumer-staples mean-reversion rule, in-sample 1.06)
 lost money out of sample; its deflated Sharpe of 0.70 had already flagged it as not significant.
+
+### Result: Masters' permutation tests (layer 2, third method)
+
+`robustness/permutation.py` adds Timothy Masters' Monte Carlo permutation tests. They shuffle the order of daily
+returns, which keeps the first and last price, volatility, skew and same-day correlation across the 10 ETFs but
+destroys any real pattern, and then rerun the *entire* search on each shuffled history. Tested in
+`tests/test_permutation.py` (keeps what it should, misses nothing planted, flags nothing in noise). Caveat: shuffling
+also destroys volatility clustering, so strategies that live on it look better than they are, never worse.
+`research/permutation_tests.py`, 1,000 shuffles each, data before the holdout:
+
+| Test | Real data | Shuffled histories | p |
+|---|---|---|---|
+| In-sample (1999-2012): best Sharpe of ~2,000 rules | 1.06 | median 0.80, 95th pct 1.02 | 0.031 |
+| Walk-forward (2005-2026): re-pick the best rule every month on the trailing 5 years | Sharpe 0.19 (SPY 0.62) | median 0.17, 95th pct 0.49 | 0.45 |
+
+Search luck alone produces an in-sample Sharpe of about 0.8, so most of the winner's 1.06 is the search. It misses
+Masters' 1% bar. Walked forward the way it would really trade, the search is indistinguishable from a worthless
+one, and earns a third of buy-and-hold's Sharpe. Three independent methods agree: deflated Sharpe 0.70, PBO 0.20,
+and now both permutation tests.
+
+**Post hoc: fair-market Monte Carlo of the Kalshi bucket search** (`research/posthoc_longshot_mc.py`). Simulate
+2,000 histories in which every quote is exactly fair at its midpoint (you still pay spread and fee), rerun the full
+bucket x side x horizon search on each, and compare the best result with the real best. Profit is scaled by the noise
+the fair price implies, the same in both worlds.
+
+| Series | Combinations searched | Real best | Fair-market best (median, 95th pct) | Family-wise p |
+|---|---|---|---|---|
+| Nasdaq-100 | 58 | sell under-2-cent contracts 1h out: 1.19 | 0.86, 1.78 | 0.26 |
+| S&P 500 | 66 | buy 80-90 cent contracts 1h out: 1.02 | 1.05, 1.98 | 0.54 |
+
+The Nasdaq long-shot bucket is what a 58-way search of a fair market finds about a quarter of the time. The usual
+t-statistic says otherwise (p 0.003), but it estimates noise from data with one loss in 473 trades, the same
+failure that collapsed the holdout bootstrap; the script prints both so the difference is visible.
 
 ## Research plan
 
