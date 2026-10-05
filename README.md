@@ -57,7 +57,7 @@ it cell by cell like a notebook.
   with wide spreads, so the smile was fitted with almost no upside quotes and bent into an impossible density (mass
   2.2). The fit now penalizes butterfly arbitrage (Durrleman's condition), Lee's wing bound and negative variance
   across the whole range probabilities are read from, and the forward survives a parity slope just above 1.
-- **More on tests.** `python3 run_tests.py` runs six tests, including the Kalshi ladder maths (exact on range
+- **More on tests.** `python3 run_tests.py` runs seven tests, including the Kalshi ladder maths (exact on range
   boundaries, within 0.16 pp between them, correct basket costs and fees). The other three: the robustness layer rejects pure noise and finds a
   planted edge; Breeden-Litzenberger recovers known probabilities from noisy quotes (within 0.01 pp on a flat
   smile, 0.63 pp on a skewed one); and no strategy rule can see future prices (864 perturbation checks).
@@ -250,3 +250,43 @@ launchctl unload ~/Library/LaunchAgents/com.implied-odds.snapshot.plist   # stop
 
 Collectors use only the Python standard library. Analysis notebooks will need `numpy`, `pandas`, `scipy`
 and `matplotlib` (see `requirements.txt`).
+
+## Microstructure: is Kalshi ladder activity self-exciting? (Hawkes)
+
+Pre-registered in `research/PREREGISTRATION_HAWKES.md` (commit 3532455) before any real-data fit. Model:
+`microstructure/hawkes.py`, discrete-time Hawkes with a jointly fitted intraday baseline and a 30-minute half-life cap;
+simulation tests in `tests/test_hawkes.py`. Data: 115 pre-holdout days, the last 360 minutes before the close, counts
+per minute of contracts with a 1-minute candle ("activity") and with a trade ("trades").
+
+**Pre-registered result: all four verdicts CONFIRMED** (95% day-bootstrap intervals, 1,000 resamples):
+
+| | n (branching ratio) | half-life |
+|---|---|---|
+| S&P activity | 0.875 (0.799 to 0.964) | 4.5 min (3.6 to 6.1) |
+| S&P trades | 0.905 (0.869 to 0.939) | 7.6 min (6.3 to 9.6) |
+| Nasdaq activity | 0.976 (0.944 to 0.983) | 5.5 min (4.6 to 6.6) |
+| Nasdaq trades | 0.951 (0.853 to 0.999) | 16.8 min (11.4 to 22.8) |
+
+**Why those numbers overstate it (post hoc, addendum committed c96b975 before the bootstrap finished).** The
+pre-registered model shares one baseline across days. Days differ in overall level far more than chance allows (daily
+totals vary 29 to 72% against 2 to 11% for Poisson), and on simulated data with that kind of variation and *no*
+self-excitation the pre-registered fit returns n = 0.999. Refitting with a level per day (500 resamples):
+
+| | n with day effects | half-life |
+|---|---|---|
+| S&P activity | 0.676 (0.531 to 0.768) | 3.1 min (2.0 to 3.9) |
+| S&P trades | 0.463 (0.405 to 0.505) | 2.8 min (2.1 to 3.6) |
+| Nasdaq activity | 0.827 (0.739 to 0.955) | 4.3 min (3.6 to 6.2) |
+| Nasdaq trades | 0.273 (0.205 to 0.333) | 1.6 min (1.0 to 2.2) |
+
+Self-excitation survives everywhere, but the trade numbers halve or more, and the bursts are short (2 to 4 minutes).
+S&P trades excite more than Nasdaq trades (+0.19, +0.11 to +0.27); for quote activity it is the other way round.
+
+**Reading it honestly.** Quote activity is the weaker evidence: one index tick re-prices many contracts, and index
+volatility clusters on its own, so a high n for activity is largely the index, not Kalshi traders. Trades are closer
+to "trading begets trading", and even there a common driver can't be ruled out. Fit quality is uneven: residual
+dispersion is 1.3 to 1.4 for trades (close to Poisson) but far above 1 for activity, and the S&P activity estimate
+moves from 0.42 (Oct to Dec) to 0.94 (Jan to Mar) under the pre-registered model. Pre-registered prediction: activity
+n well above 0.10 with half-life under 10 minutes held, except Nasdaq trades (16.8 min, pre-registered model);
+"trades less self-exciting than activity" failed on S&P under the pre-registered model and held with day effects.
+Any later use of n is pre-registered with the day-effects model.
