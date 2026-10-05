@@ -47,7 +47,10 @@ def n_knots(T, spacing=15):
 
 
 def _sig(x):
-    return 1 / (1 + math.exp(-x))
+    if x >= 0:
+        return 1 / (1 + math.exp(-x))
+    z = math.exp(x)                                        # stable for large negative x
+    return z / (1 + z)
 
 
 def _unpack(x):
@@ -115,3 +118,49 @@ def simulate(days, b, n, phi, rng=None):
             E = phi * E + (1 - phi) * N[:, t - 1]
         N[:, t] = rng.poisson(b[t] + n * E)
     return N
+
+
+def _nll_grad_days(x, N, B):
+    """Day effects: lambda_dt = exp(a_d) * b_t + n * E_dt, a_0 = 0. x = [n, phi, theta (K), a_1..a_{D-1}]."""
+    D, T = N.shape
+    K = B.shape[1]
+    n, phi = N_MAX * _sig(x[0]), PHI_MAX * _sig(x[1])
+    th, a = x[2:2 + K], np.r_[0.0, x[2 + K:]]
+    base = np.exp(B @ th)
+    scale = np.exp(a)
+    bd = scale[:, None] * base[None, :]
+    def ll_of(E):
+        lam = np.maximum(bd + n * E, 1e-12)
+        return -(N * np.log(lam) - lam).sum(), lam
+    E = excitation(N, phi)
+    nll, lam = ll_of(E)
+    r = N / lam - 1
+    g = np.empty_like(x)
+    g[0] = -(r * E).sum() * N_MAX * _sig(x[0]) * (1 - _sig(x[0]))
+    h = 1e-6
+    g[1] = (ll_of(excitation(N, PHI_MAX * _sig(x[1] + h)))[0] - ll_of(excitation(N, PHI_MAX * _sig(x[1] - h)))[0]) / (2 * h)
+    rb = r * bd
+    g[2:2 + K] = -(B.T @ rb.sum(0))
+    g[2 + K:] = -rb.sum(1)[1:]
+    return nll, g
+
+
+def fit_day_effects(N, spacing=15):
+    """Like fit(), plus a multiplicative level per day. Busy days and quiet days with no clustering inside them
+    otherwise look like self-excitation, because a shared baseline under-predicts a busy day all day long and the
+    excitation term picks up the slack."""
+    N = np.asarray(N, float)
+    D, T = N.shape
+    K = n_knots(T, spacing)
+    B = basis(T, K)
+    th0 = np.linalg.lstsq(B, np.log(np.maximum(N.mean(0), 1e-3)), rcond=None)[0]
+    dm = np.maximum(N.mean(1), 1e-3)
+    a0 = np.log(dm / dm[0])[1:]
+    best = None
+    for n0, p0 in ((0.2, 0.5), (0.5, 0.8), (0.05, 0.9), (0.7, 0.3)):
+        x0 = np.r_[math.log(n0 / (N_MAX - n0)), math.log(p0 / (1 - p0)), th0 + math.log(1 - n0), a0]
+        r = minimize(_nll_grad_days, x0, args=(N, B), jac=True, method="L-BFGS-B", options={"maxiter": 2000})
+        if best is None or r.fun < best.fun:
+            best = r
+    n, phi = N_MAX * _sig(best.x[0]), PHI_MAX * _sig(best.x[1])
+    return {"n": n, "phi": phi, "half_life": math.log(0.5) / math.log(phi), "loglik": -best.fun}

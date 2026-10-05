@@ -59,3 +59,19 @@ each other. This study cannot separate the two; it measures whether bursts exist
 Prediction, written down so it can be wrong: activity is self-exciting on both indexes (n well above 0.10) with a
 half-life under 10 minutes, and trades are less self-exciting than quote activity.
 Nothing in the method changes after the results are seen. Any failure is reported in the README with its numbers.
+
+## Addendum, 2026-10-04 (after the real-data point estimates were seen, before the bootstrap finished)
+
+The point estimates of n came out at 0.88 to 0.98. Testing why, I found a confound the pre-registered model does not
+handle: **day-level heterogeneity**. The model shares one baseline across all days. If some days are busy all day and
+others quiet, the shared baseline under-predicts a busy day from start to finish, and the excitation term (recent
+activity) fills the gap. On simulated days whose levels vary by about 50% and which have no self-excitation at all,
+the pre-registered fit returns n = 0.999. Adding a multiplicative level per day returns n = 0.000 on the same data and
+about 0.45 when the true n is 0.5 (slightly biased low). Both are now checks in `tests/test_hawkes.py`.
+
+What changes and what doesn't:
+- The pre-registered analysis runs exactly as written and its four verdicts are reported as the official result.
+- The day-effects refit (`research/posthoc_hawkes_day_effects.py`) is reported beside it, labelled post hoc,
+  with the same 0.10 bar and day bootstrap. It was chosen after the point estimates were seen, so it is evidence of
+  lower standing than the pre-registered result, even though it is the better-specified model.
+- Any later study that relies on n uses the day-effects model and is pre-registered with it.
