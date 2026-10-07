@@ -11,4 +11,9 @@ if [ -n "$last" ]; then
   age=$(( $(date -u +%s) - $(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$last" +%s) ))
   if [ "$age" -lt 900 ]; then log "skip: a run started ${age}s ago"; exit 0; fi
 fi
-if gh workflow run snapshot.yml --ref main >/dev/null 2>&1; then log "dispatched"; else log "dispatch FAILED"; exit 1; fi
+# After a sleep/wake the network can take a few seconds to come back, so retry before giving up.
+for try in 1 2 3; do
+  if err=$(gh workflow run snapshot.yml --ref main 2>&1); then log "dispatched (try $try)"; exit 0; fi
+  sleep 20
+done
+log "dispatch FAILED after 3 tries: $(echo "$err" | tail -1)"; exit 1
