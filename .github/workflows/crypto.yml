@@ -1,11 +1,11 @@
-# Bitcoin collection (research/PREREGISTRATION_BTC.md): every 30 minutes, every day, a matched snapshot of Deribit's
+# Bitcoin collection (research/PREREGISTRATION_BTC.md): every hour at :07, every day, a matched snapshot of Deribit's
 # BTC options and Kalshi's hourly BTC contracts. Saved to the data branch in their own folders (deribit_btc,
 # kalshi_crypto), apart from the stock snapshots.
 name: crypto
 
 on:
   schedule:
-    - cron: "7,37 * * * *"
+    - cron: "7 * * * *"
   workflow_dispatch:
 
 permissions:
