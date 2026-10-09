@@ -352,6 +352,30 @@ Verdict: not pursued. A forward test of the best of 48 would be a test of a sele
 would hold about 70 such quotes, too few to see a 1.6-cent effect. Daily Wikipedia views are one channel; intraday
 news volume (GDELT) is untested, and is worth revisiting only if layer 5's forward test finds a gap to explain.
 
+## Layer 10, exploratory: Kalshi's CPI markets vs the Cleveland Fed's inflation nowcast. Kalshi wins
+
+Question (2026-10-09): Kalshi lists monthly "CPI above k%" contracts (KXCPI headline, KXCPICORE core). The Cleveland
+Fed publishes a daily inflation nowcast that has historically beaten economists' consensus. When the two disagree, is
+the nowcast right? `research/explore_cpi.py` compares them at 10:30 ET the day before each release (half an hour after
+the nowcast updates), on releases before the holdout. The nowcast becomes a probability per contract through a normal
+error whose spread is its own day-before error over 2013 to mid-2021, before Kalshi listed CPI markets (0.14 points
+headline, 0.17 core). Data: the nowcast's chart file (daily paths since 2013) and Kalshi's hourly candles.
+
+Result, 37 headline and 36 core releases (2023 to March 2026), 252 quoted contracts:
+
+| | Brier, Kalshi mid | Brier, nowcast | Kalshi minus nowcast (95%, resampling releases) |
+|---|---|---|---|
+| Headline CPI | 0.109 | 0.156 | -0.048 (-0.084 to -0.013) |
+| Core CPI | 0.113 | 0.150 | -0.037 (-0.068 to -0.003) |
+
+Kalshi is significantly more accurate. When they disagree by more than 15 points, the nowcast is the closer one only
+27 to 29% of the time. Trading toward the nowcast loses nothing on average but wins nothing either: means of -0.3 to
++3.3 cents per contract with intervals of about +/-8 cents, won 25 to 32% of the time. Reading: the market already
+prices the nowcast plus whatever else traders know (the Fed's own paper found Kalshi beats the Bloomberg consensus on
+headline CPI). Verdict: no edge from the public nowcast; not pursued. One caveat in the method: a single fixed error
+spread for the nowcast is cruder than Kalshi's own distribution, which hurts its Brier score; a better-calibrated
+nowcast distribution could narrow the gap, but not reverse which side the big disagreements resolve toward.
+
 ## Paper trading the layer 5 rule
 
 `trade/paper.py` runs layer 5's trading rule live: after every collection run it fits the options, checks each
