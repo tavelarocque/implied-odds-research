@@ -12,7 +12,7 @@ Kalshi splits settled markets in two: recently settled ones come from /markets, 
 before the archive cutoff comes from /historical/markets. Both are pulled and merged. Everything is
 resumable: rerunning skips what's already on disk.
 """
-import argparse, gzip, json, os, sys, time, urllib.parse
+import argparse, gzip, json, os, re, sys, time, urllib.parse
 from datetime import datetime, timezone
 from common import ROOT, get_json
 
@@ -101,14 +101,15 @@ def near_settlement(m, pct):
     return abs(float(k) - float(v)) <= pct / 100 * float(v)
 
 
-def pull_candles(series_list, period, since=None, hours_before=None, near=None):
+def pull_candles(series_list, period, since=None, hours_before=None, near=None, event_regex=None):
     """period in minutes: 1, 60 or 1440. hours_before limits the window before close (default: market lifetime).
     near (percent) keeps only strikes within that distance of the settled value."""
     for s in series_list:
         outdir = os.path.join(HIST, f"candles_{period}m", s)
         os.makedirs(outdir, exist_ok=True)
         ms = [m for m in load_markets(s) if (not since or (m.get("close_time") or "") >= since)
-              and (near is None or near_settlement(m, near))]
+              and (near is None or near_settlement(m, near))
+              and (event_regex is None or re.search(event_regex, m["event_ticker"]))]
         done = fetched = failed = 0
         for m in ms:
             t = m["ticker"]
@@ -151,8 +152,9 @@ if __name__ == "__main__":
     ap.add_argument("--since", help="only markets closing on/after this date, YYYY-MM-DD")
     ap.add_argument("--hours-before", type=float, help="only the last N hours before each market closes")
     ap.add_argument("--near", type=float, help="only strikes within this percent of the settled value")
+    ap.add_argument("--event-regex", help="only events whose ticker matches, e.g. '17$' for KXBTCD's 5pm ET sets")
     a = ap.parse_args()
     if a.what == "markets":
         pull_markets(a.series, a.since)
     else:
-        pull_candles(a.series, a.period, a.since, a.hours_before, a.near)
+        pull_candles(a.series, a.period, a.since, a.hours_before, a.near, a.event_regex)

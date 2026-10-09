@@ -1,7 +1,7 @@
 """Daily public attention, for layer 9 (does attention widen Kalshi's mispricing?).
 
 Wikipedia pageviews (Wikimedia REST API, users only, all access) for a few articles that retail attention to the
-markets lands on. Daily counts per UTC day, from 2022-04-01 (the start of Kalshi's index history) to yesterday.
+markets lands on. Daily counts per UTC day, from 2015-07-01 (the start of the pageviews API) to yesterday.
 Writes data/history/attention/wikipedia_daily.csv (date, article, views). Standard library only.
 
 Run from collect/:  python3 attention_history.py
@@ -20,7 +20,7 @@ def main():
     end = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y%m%d")
     rows = []
     for a in ARTICLES:
-        url = f"{BASE}/{urllib.parse.quote(a, safe='')}/daily/20220401/{end}"
+        url = f"{BASE}/{urllib.parse.quote(a, safe='')}/daily/20150701/{end}"
         try:
             items = get_json(url)["items"]
         except Exception as e:

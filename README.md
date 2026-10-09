@@ -376,6 +376,39 @@ headline CPI). Verdict: no edge from the public nowcast; not pursued. One caveat
 spread for the nowcast is cruder than Kalshi's own distribution, which hurts its Brier score; a better-calibrated
 nowcast distribution could narrow the gap, but not reverse which side the big disagreements resolve toward.
 
+## Exploratory: public attention vs S&P volatility. Mostly the VIX's horizon
+
+`research/explore_attention_vol.py` and `explore_attention_vol_robust.py` (2015-08 to 2026-03, 2,676 sessions): after
+days when the "Stock market crash" Wikipedia page spikes (top fifth), the next session's realized variance beat the
+30-day VIX's implied variance by 37% (8% to 75%, block bootstrap), and the next 5 sessions' by 19%. Against Cboe's
+9-day VIX the 5-day effect vanishes (+5%) and the next-day effect falls to +20% (-5% to +51%), +24% (-1% to +58%) with
+controls for recent moves. Reading: after a scare, short-dated options already price the jump the 30-day VIX averages
+away. A weak next-day hint at most, and not tradable without same-day S&P options. Not pursued.
+
+## Layer 11, exploratory: Kalshi's Bitcoin long shots and crypto crowd mood. A candidate
+
+`research/explore_btc_sentiment.py`, development sample only: Kalshi's 5pm ET Bitcoin sets (KXBTCD) from 2024-03-20 to
+2026-03-31, 664 days, hourly candles for strikes within 4% of the settlement (`collect/kalshi_btc_daily.py`); Crypto
+Fear & Greed, Binance funding and Wikipedia attention (`collect/crypto_sentiment.py`). A long shot is a side priced at
+10 cents or less: YES on a high strike (upside) or NO on a low strike (downside).
+
+**Base effect.** Long shots are overpriced on both sides: priced at 4 to 5 cents, they paid 1.5 to 2.3% of the time
+1 to 3 hours out, about 2.7 cents too expensive (1.5 to 3.7). Selling them at the touch after fees: +0.5 to +0.8 cents,
+intervals including 0. On average, not tradable.
+
+**Mood, ten comparisons fixed before running.** Three pass, all the same story: when the crowd is bearish, downside long
+shots are more overpriced. Fear (index at 25 or below): +2.3 cents more at 1h (+1.0 to +4.0) and at 3h (+0.8 to
++4.1). Funding in its bottom fifth: +1.8 cents at 1h (+0.4 to +3.4); +1.2 at 3h (-0.6 to +2.9). Greed, crowded longs and
+attention: nothing. The two measures correlate (0.55 by day), so this is closer to one finding confirmed twice than
+three. Selling the downside long shot on fear-or-short-funding days: 325 trades on 157 days at 1h, +2.35 cents per
+contract, none of the 325 paid out; 441 trades at 3h, +1.87 cents (+0.82 to +2.64), 0.9% paid out. Other days: about 0.
+
+**Why it is only a candidate.** The 1h interval is not meaningful: with no losses, the bootstrap has nothing to vary
+(the same trap as the S&P long-shot holdout). The right yardstick is the loss rate: break-even is about 2.4%, and 0 in
+325 trades bounds it below about 0.9%, but the trades cluster by day (0 losses on 157 days bounds the daily rate below
+about 1.9%). Fear days also cluster in time (most fall in Nov 2025 to Mar 2026). It is one candidate out of ten, found
+on the development sample. Next step: pre-register it with a loss-rate bar and test it out of sample.
+
 ## Paper trading the layer 5 rule
 
 `trade/paper.py` runs layer 5's trading rule live: after every collection run it fits the options, checks each
