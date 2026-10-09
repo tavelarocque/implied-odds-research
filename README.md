@@ -444,6 +444,20 @@ out). One hour out, nothing. One pick from several comparisons, pre-registered a
 (`research/PREREGISTRATION_LAYER11B.md`) before the layer 11 holdout was analysed, and tested on it with
 `research/test_layer11b.py`.
 
+## Robustness of layers 11 and 11b on the development sample: a plateau, but the mood timing is only borderline
+
+`research/robust_layer11.py`, development data only, nothing pre-registered changed. **Grid** (3 hours out): all 64
+combinations of Fear & Greed cut-off (10 to 50) and funding cut-off (off to bottom 40%) make money, +0.8 to +3.0 cents;
+the pre-registered cell (+1.9 cents, 183 days) sits in the middle of a plateau (its 8 neighbours +1.5 to +2.3).
+**Probability of backtest overfitting** (CSCV, 8 blocks, 70 splits): 17%. **Walk-forward:** re-picking the best cell
+each half-year earned the same out of sample as the fixed rule (+1.85 cents per contract both); the fixed rule made
+money in 4 of 5 half-years (2024H2: -1.3 cents). **But** a Monte Carlo that circularly shifts the signal days through
+the calendar (keeping their number and clustering) gives the pre-registered cell p = 0.07, and the family-wise check
+p = 0.53: selling these long shots made +0.56 cents on all days, and the signal days fall in a stretch when most days
+paid. So the parameters are not fragile, but the evidence that mood rather than the period drives it is weak.
+**Horizon:** 1 and 3 hours out are positive at every cut-off; 6 hours out loses at almost every cut-off, for both
+layer 11 and 11b. Layer 11b's regime cut-off (0.3 to 0.7) is +1.7 to +2.3 cents at 3 hours, all with p < 0.05.
+
 ## Paper trading the layer 5 rule
 
 `trade/paper.py` runs layer 5's trading rule live: after every collection run it fits the options, checks each
