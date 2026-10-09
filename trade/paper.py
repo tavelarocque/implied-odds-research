@@ -7,12 +7,15 @@ contracts at that price. One trade per contract per day (the first signal), held
 
 What this adds over the layer 5 backtest: each decision is written to the data branch by the run that made it, so git
 timestamps it and it cannot use anything from later in the day. It also records how much money each trade ties up,
-which is what a real account would need. Profit stays sealed: `report` refuses to run before 2026-11-30, like layer 5.
+which is what a real account would need. Each run also asks Kalshi for the result of every unsettled trade and records
+it in data/raw/paper_results/<day>.json. Outcomes are watched trade by trade from 2026-10-09 (Tave's call); the rule
+itself is frozen until the layer 5 analysis on 2026-11-30, and `report` (the pooled verdict) still waits for that date.
 
 Run from the project root:
     python3 trade/paper.py live            evaluate this run's snapshot (the GitHub workflow calls this)
     python3 trade/paper.py replay          rerun the rule over the window so far from the data branch, decisions only
     python3 trade/paper.py replay --check  also confirm the replay matches layer 5's own trade logic exactly
+    python3 trade/paper.py digest [N]      the last N trading days' trades and whether each won (default 1)
     python3 trade/paper.py report          on or after 2026-11-30: settle the live log; profit, capital, worst day
 """
 import glob, gzip, io, json, os, subprocess, sys
@@ -151,6 +154,78 @@ def live():
     for x in trades:
         print(f"  {x['side']:<4} {x['qty']} {x['ticker']} at {100 * x['price']:.0f}c (options {100 * x['p_opt']:.1f}c), "
               f"ties up ${x['capital']:.2f}")
+    try:
+        settle(extra={day: trades})
+    except Exception as e:                                  # settling can wait for the next run
+        print(f"paper: settlement check failed ({e}); will retry next run")
+
+
+def all_trades():
+    """Every live trade on the data branch, by day, plus the settlement results recorded so far."""
+    names = subprocess.run(["git", "ls-tree", "-r", "--name-only", "origin/data", "data/raw/paper/", "data/raw/paper_results/"],
+                           cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
+    trades, results = {}, {}
+    for n in sorted(names):
+        if n.startswith("data/raw/paper_results/"):
+            results[os.path.basename(n)[:10]] = json.loads(subprocess.run(
+                ["git", "show", f"origin/data:{n}"], cwd=ROOT, capture_output=True, check=True).stdout)
+        else:
+            trades.setdefault(n.split("/")[3], []).extend(r for r in L5.load(n) if r.get("type") == "trade")
+    return trades, results
+
+
+def settle(extra=None):
+    """Ask Kalshi for the result of every logged trade not yet settled; write data/raw/paper_results/<day>.json."""
+    sys.path.insert(0, os.path.join(ROOT, "collect"))
+    from common import get_json
+    BASE = "https://api.elections.kalshi.com/trade-api/v2"
+    trades, results = all_trades()
+    for d, ts in (extra or {}).items():
+        trades.setdefault(d, []).extend(ts)
+    for day, ts in trades.items():
+        res = dict(results.get(day, {}))
+        new = 0
+        for tk in sorted({t["ticker"] for t in ts} - set(res)):
+            m = get_json(f"{BASE}/markets/{tk}").get("market", {})
+            if m.get("result") in ("yes", "no"):
+                res[tk] = m["result"]; new += 1
+        if new:
+            d = os.path.join(RAW, "paper_results")
+            os.makedirs(d, exist_ok=True)
+            json.dump(res, open(os.path.join(d, f"{day}.json"), "w"), indent=0, sort_keys=True)
+            print(f"paper: settled {new} trades from {day}")
+
+
+def digest(days_back=1):
+    """Plain-English list of the latest trading days' decisions and, where settled, whether each won."""
+    subprocess.run(["git", "fetch", "-q", "origin", "+refs/heads/data:refs/remotes/origin/data"], cwd=ROOT, check=True)
+    trades, results = all_trades()
+    total, n_set, wins = 0.0, 0, 0
+    rows = []
+    for day in sorted(trades):
+        for t in sorted(trades[day], key=lambda t: t["snap"]):
+            r = results.get(day, {}).get(t["ticker"])
+            pnl = None
+            if r:
+                y = 1.0 if r == "yes" else 0.0
+                pnl = t["qty"] * ((y - t["price"]) if t["side"] == "buy" else (t["price"] - y)) - t["fee"]
+                total += pnl; n_set += 1; wins += pnl > 0
+            rows.append((day, t, r, pnl))
+    show = sorted(trades)[-days_back:] if trades else []
+    rng_ = lambda t: (f"{t['lo']:,.0f} to {t['hi']:,.0f}" if t["lo"] and t["hi"] else
+                      f"above {t['lo']:,.0f}" if t["lo"] else f"below {t['hi']:,.0f}")
+    for day in show:
+        print(f"{day}:")
+        for d, t, r, pnl in rows:
+            if d != day:
+                continue
+            when = pd.Timestamp(t["snap"]).tz_convert("America/Vancouver").strftime("%H:%M")
+            what = "bought YES" if t["side"] == "buy" else "sold YES"
+            out = "open" if r is None else f"{'WON' if pnl > 0 else 'LOST'} ${pnl:+.2f} (settled {r.upper()})"
+            print(f"  {when} PT  {L5.NAMES[t['series']]:<10} {what} x{t['qty']} on {rng_(t)} at {100 * t['price']:.0f}c "
+                  f"(options said {100 * t['p_opt']:.1f}c) -> {out}")
+    print(f"Since live start: {sum(len(v) for v in trades.values())} trades, {n_set} settled, {wins} won, "
+          f"{n_set - wins} lost, net ${total:+.2f} after fees")
 
 
 def replay(check=False):
@@ -244,5 +319,7 @@ if __name__ == "__main__":
         replay(check="--check" in sys.argv)
     elif cmd == "report":
         report()
+    elif cmd == "digest":
+        digest(int(sys.argv[2]) if len(sys.argv) > 2 else 1)
     else:
         sys.exit(__doc__)

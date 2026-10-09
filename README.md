@@ -323,4 +323,4 @@ trades layer 5's backtest does (41 of 41 on the first five days). Profit is seal
 run before 2026-11-30.
 
 Replay of the first five days (decisions only): 18 S&P and 23 Nasdaq trades. Capital tied up per day was a median of
-about $200 per index, because most trades are in cheap tail ranges.
+about $200 per index: a 100-lot at these prices risks about $20 or less.
