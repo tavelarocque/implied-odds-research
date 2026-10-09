@@ -14,6 +14,8 @@ import sys
 from kalshi_history import BASE, HIST, DROP, ts, PAUSE
 sys.path.insert(0, os.path.join(ROOT, "research"))
 from config import FINAL_TEST_START
+# LAYER11_HOLDOUT=1 fetches the holdout's candles instead (research/PREREGISTRATION_LAYER11.md, test A), and only those.
+HOLDOUT_WINDOW = (FINAL_TEST_START, "2026-09-30") if os.environ.get("LAYER11_HOLDOUT") == "1" else None
 
 
 def main():
@@ -59,7 +61,11 @@ def main():
     for m in have.values():
         v, k = m.get("expiration_value"), m.get("floor_strike")
         try:
-            if (m.get("close_time") or "")[:10] >= FINAL_TEST_START:
+            day = (m.get("close_time") or "")[:10]
+            if HOLDOUT_WINDOW:
+                if not (HOLDOUT_WINDOW[0] <= day <= HOLDOUT_WINDOW[1]):
+                    continue
+            elif day >= FINAL_TEST_START:
                 continue
             if v in (None, "") or k is None or abs(float(k) - float(v)) > 0.04 * float(v):
                 continue
