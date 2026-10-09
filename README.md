@@ -430,6 +430,20 @@ contract, none of the 325 paid out; 441 trades at 3h, +1.87 cents (+0.82 to +2.6
 about 1.9%). Fear days also cluster in time (most fall in Nov 2025 to Mar 2026). It is one candidate out of ten, found
 on the development sample. Next step: pre-register it with a loss-rate bar and test it out of sample.
 
+## Exploratory: hidden Markov regimes. Nothing for the S&P; one Bitcoin candidate (layer 11b)
+
+`research/explore_regimes.py`: a Gaussian hidden Markov model on each day's (return, log range), two or three states
+labelled calmest first, refitted every year on earlier years only, and only filtered probabilities (the smoothed ones
+most tutorials plot use the future). **S&P (SPY, 1997 to 2026-03):** on days the model calls turbulent, the next move
+was larger relative to the VIX (0.69x vs 0.55x implied), but the effect shrinks once realized vs implied volatility is
+controlled for and vanishes with the 50-day trend added (+0.08, -0.06 to +0.18; VIX9D +0.03, -0.14 to +0.19). The same
+end as the efficiency model: nothing beyond the VIX and the trend. **Bitcoin long shots (layer 11's development
+sample):** 3 hours out, downside long shots were more overpriced on turbulent days (+4.1 vs +1.6 cents; difference
++2.5, +0.8 to +4.7), including days without a fear-or-funding signal (selling them +2.0 vs -1.6 cents, 0.8% vs 4.3% paid
+out). One hour out, nothing. One pick from several comparisons, pre-registered as layer 11b
+(`research/PREREGISTRATION_LAYER11B.md`) before the layer 11 holdout was analysed, and tested on it with
+`research/test_layer11b.py`.
+
 ## Paper trading the layer 5 rule
 
 `trade/paper.py` runs layer 5's trading rule live: after every collection run it fits the options, checks each
