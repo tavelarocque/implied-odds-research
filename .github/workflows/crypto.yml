@@ -1,0 +1,46 @@
+# Bitcoin collection (research/PREREGISTRATION_BTC.md): every 30 minutes, every day, a matched snapshot of Deribit's
+# BTC options and Kalshi's hourly BTC contracts. Saved to the data branch in their own folders (deribit_btc,
+# kalshi_crypto), apart from the stock snapshots.
+name: crypto
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: crypto
+  cancel-in-progress: false
+
+jobs:
+  crypto:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Deribit and Kalshi BTC snapshot
+        env:
+          KALSHI_SERIES: KXBTCD
+          KALSHI_KIND: kalshi_crypto
+        run: |
+          cd collect
+          python deribit_snapshot.py
+          python kalshi_snapshot.py
+      - name: Save to the data branch
+        run: |
+          git config user.name "implied-odds-collector"
+          git config user.email "actions@users.noreply.github.com"
+          git fetch -q origin data
+          git worktree add -q store FETCH_HEAD
+          cd store && git checkout -q -B data
+          mkdir -p data/raw
+          cp -r ../data/raw/* data/raw/
+          git add -f data/raw
+          git commit -qm "crypto snapshot $(date -u +%Y-%m-%dT%H:%MZ)" || { echo "nothing new"; exit 0; }
+          for i in 1 2 3; do git push -q origin data && break; git pull -q --rebase origin data; done
