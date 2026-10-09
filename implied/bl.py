@@ -141,12 +141,14 @@ class Surface:
         return self.k_min <= math.log(K / self.F) <= self.k_max
 
 
-def fit_surface(strikes, call_mid, put_mid, T, spot_guess=None, weights=None):
+def fit_surface(strikes, call_mid, put_mid, T, spot_guess=None, weights=None, forward=None):
     """Fit forward, discount factor and an SVI smile to one expiry's mid quotes.
-    weights: one per strike, ideally 1 / bid-ask spread (a quote's precision). Defaults to equal weights."""
+    weights: one per strike, ideally 1 / bid-ask spread (a quote's precision). Defaults to equal weights.
+    forward: (F, DF) when the venue publishes it (Deribit); then put-call parity is skipped and only the
+    out-of-the-money side needs a quote (the other side may be nan)."""
     K = np.asarray(strikes, float)
     C, P = np.asarray(call_mid, float), np.asarray(put_mid, float)
-    F, DF = estimate_forward(K, C, P, spot_guess=spot_guess, weights=weights, T=T)
+    F, DF = forward if forward is not None else estimate_forward(K, C, P, spot_guess=spot_guess, weights=weights, T=T)
     # Out-of-the-money side only: puts below the forward, calls above.
     iv = np.array([implied_vol(C[i], F, K[i], T, DF, True) if K[i] >= F else implied_vol(P[i], F, K[i], T, DF, False)
                    for i in range(len(K))])

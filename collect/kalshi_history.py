@@ -23,6 +23,7 @@ SERIES = {
     "KXINXU": "S&P 500 above/below (hourly and daily)",
     "KXNASDAQ100": "Nasdaq-100 daily close range",
     "KXNASDAQ100U": "Nasdaq-100 above/below (hourly and daily)",
+    "KXBTCD": "Bitcoin above/below at the hour (24/7)",
     "KXNASDAQ100Z": "Nasdaq-100 up on the day",
     "INX": "S&P 500 daily range (legacy ticker)",
     "INXZ": "S&P 500 up (legacy ticker)",

@@ -11,6 +11,9 @@ BASE = "https://api.elections.kalshi.com/trade-api/v2"
 # KXNASDAQ100U, about 3,200 open contracts) are left out to keep a year of cloud snapshots small.
 # Override with KALSHI_SERIES="KXINX,KXINXU,..." to collect others.
 SERIES = [s.strip() for s in os.environ.get("KALSHI_SERIES", "KXINX,KXINXW,KXNASDAQ100").split(",") if s.strip()]
+# Folder under data/raw. The crypto workflow saves to kalshi_crypto so stock analyses, which read every file in
+# data/raw/kalshi, never see its runs (layer 5's snapshot spacing rule counts files).
+KIND = os.environ.get("KALSHI_KIND", "kalshi")
 DROP = {"rules_primary", "rules_secondary", "subtitle", "yes_sub_title", "no_sub_title",
         "early_close_condition", "custom_strike", "mve_selected_legs", "price_ranges"}
 
@@ -43,8 +46,8 @@ def main():
             r = {k: v for k, v in m.items() if k not in DROP}
             r.update({"type": "market", "series": s})
             rows.append(r)
-    path = write_jsonl_gz(out_path("kalshi", ts), rows)
-    print(f"{ts.isoformat()} kalshi {counts} -> {path}")
+    path = write_jsonl_gz(out_path(KIND, ts), rows)
+    print(f"{ts.isoformat()} {KIND} {counts} -> {path}")
 
 
 if __name__ == "__main__":

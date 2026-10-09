@@ -320,6 +320,20 @@ to every hourly event, 60 to 5 minutes before its close, on the same window; run
 Data quality on one day (2026-10-08): all 14 events usable, the implied median defined in 51 to 56 of 56 minutes and
 changing in about 95% of them. Prediction: the hourly contracts are faster than the daily ladder.
 
+## Layer 5 on Bitcoin: pre-registered, collecting
+
+The same three questions as layer 5, on Kalshi's hourly Bitcoin contracts (KXBTCD) against Deribit's BTC options.
+Bitcoin trades all week, so the sample grows about three times faster. `research/PREREGISTRATION_BTC.md` fixes the
+method before the first counted snapshot (2026-10-10); `.github/workflows/crypto.yml` collects every 30 minutes, all
+days, into `data/raw/deribit_btc/` and `data/raw/kalshi_crypto/` (kept apart from the stock snapshots, whose spacing
+rule counts files).
+
+The hard part is time. Deribit's options expire at 08:00 UTC and Kalshi's settle on the hour, so `implied/crypto.py`
+fits Deribit's mark-volatility smile for the next expiry and moves it back to Kalshi's settlement, keeping its shape
+in standard deviations and letting variance accrue evenly in calendar time. That assumption is the weakest link, and
+the options probability's own calibration is reported as its check. `research/btc_options_vs_kalshi.py` reuses layer
+5's quote filter, fee, trade rule and bootstrap; `SMOKE=1` reports data quality until 2026-11-30.
+
 ## Paper trading the layer 5 rule
 
 `trade/paper.py` runs layer 5's trading rule live: after every collection run it fits the options, checks each
