@@ -290,3 +290,11 @@ moves from 0.42 (Oct to Dec) to 0.94 (Jan to Mar) under the pre-registered model
 n well above 0.10 with half-life under 10 minutes held, except Nasdaq trades (16.8 min, pre-registered model);
 "trades less self-exciting than activity" failed on S&P under the pre-registered model and held with day effects.
 Any later use of n is pre-registered with the day-effects model.
+
+## Layer 5, options-implied fair value vs Kalshi: pre-registered, collecting
+
+Pre-registered in `research/PREREGISTRATION_LAYER5.md` (commit 54aafdd) before any live statistic: agreement,
+accuracy (Brier) and a fee-inclusive trading rule, per index, on the live forward sample 2026-10-05 to 2026-11-27.
+`research/options_vs_kalshi.py` runs in `SMOKE=1` mode (data quality only) until then and refuses the full run
+before 2026-11-30. First smoke run, 5 days in: 37 snapshots per index, 36 with a valid options fit, about 170
+quoted contract-snapshots per index. At that rate the window should give roughly 1,300 per index.
