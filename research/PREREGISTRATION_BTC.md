@@ -10,13 +10,12 @@ Layer 5 (`research/PREREGISTRATION_LAYER5.md`) on Bitcoin. Kalshi lists a BTC co
 clock (KXBTCD, "Bitcoin above K at the hour", each set open for its last hour, plus a 5pm ET set open for a day).
 Deribit lists BTC options, the deepest crypto options market. Same three questions: how often the options probability
 sits inside Kalshi's spread, which predicts settlement better, and whether trading Kalshi toward the options price
-makes money after fees. Bitcoin trades seven days a week, so the sample grows about three times faster than the
-stock version's.
+makes money after fees. Bitcoin trades seven days a week, so the sample grows faster than the stock version's.
 
 ## Sample
 
 - **Window:** Kalshi BTC contracts settling 2026-10-10 to 2026-11-27 (UTC dates). Run once, on or after 2026-11-30.
-- **Snapshots:** every run of `.github/workflows/crypto.yml` (every 30 minutes, all days): Deribit BTC options
+- **Snapshots:** every run of `.github/workflows/crypto.yml` (hourly at :07, all days; see the note below): Deribit BTC options
   (`collect/deribit_snapshot.py`) and Kalshi KXBTCD (`collect/kalshi_snapshot.py`, saved to `data/raw/kalshi_crypto/`,
   separate from the stock snapshots). Runs closer than 10 minutes apart: keep the earlier. Deribit snapshot within 3
   minutes of the Kalshi one. Contracts with at least 5 minutes to settlement.
@@ -69,3 +68,10 @@ within a cent or two of Kalshi's spread), Kalshi's long shots are priced above t
 no detectable difference, and rule 3 is inconclusive or "no edge" once fees are paid, with long-shot sells the only
 part that looks positive.
 Nothing in the method changes after the results are seen. Any failure is reported in the README with its numbers.
+
+## Note, 2026-10-09, before the window opened
+
+The collection schedule was cut from every 30 minutes to hourly at :07, for cost: every 30 minutes would have used most
+of the account's free GitHub Actions minutes and risked stopping the stock collection with it. Each hourly KXBTCD set
+is open for one hour, so each is still captured once, about 53 minutes before it settles; the 5pm ET set is captured
+about 24 times. Nothing else changes. Written before the first snapshot counted (2026-10-10 00:00 UTC).

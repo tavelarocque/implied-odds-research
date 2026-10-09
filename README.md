@@ -323,9 +323,9 @@ changing in about 95% of them. Prediction: the hourly contracts are faster than 
 ## Layer 5 on Bitcoin: pre-registered, collecting
 
 The same three questions as layer 5, on Kalshi's hourly Bitcoin contracts (KXBTCD) against Deribit's BTC options.
-Bitcoin trades all week, so the sample grows about three times faster. `research/PREREGISTRATION_BTC.md` fixes the
-method before the first counted snapshot (2026-10-10); `.github/workflows/crypto.yml` collects every 30 minutes, all
-days, into `data/raw/deribit_btc/` and `data/raw/kalshi_crypto/` (kept apart from the stock snapshots, whose spacing
+Bitcoin trades all week, so the sample grows faster. `research/PREREGISTRATION_BTC.md` fixes the method before the
+first counted snapshot (2026-10-10); `.github/workflows/crypto.yml` collects hourly at :07 (kept under the free Actions
+minutes), all days, into `data/raw/deribit_btc/` and `data/raw/kalshi_crypto/` (kept apart from the stock snapshots, whose spacing
 rule counts files).
 
 The hard part is time. Deribit's options expire at 08:00 UTC and Kalshi's settle on the hour, so `implied/crypto.py`
