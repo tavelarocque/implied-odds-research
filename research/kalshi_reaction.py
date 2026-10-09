@@ -43,6 +43,7 @@ def index_minutes():
         df.index = pd.to_datetime(df.index, utc=True, errors="coerce")
         frames.append(df[df.index.notna()])
     px = pd.concat(frames)
+    px.index = pd.DatetimeIndex(pd.to_datetime(px.index, utc=True))   # files can differ in time resolution
     px = px[~px.index.duplicated(keep="last")].sort_index()
     px.index = px.index + pd.Timedelta(minutes=1)            # a bar stamped t covers t to t+1
     return px
@@ -153,7 +154,7 @@ def main():
     px = index_minutes()
     lines = [f"Window {START} to {END}. Data quality:"]
     for series, (sym, name) in SERIES.items():
-        s = px[sym].dropna() if sym in px else pd.Series(dtype=float)
+        s = px[sym].dropna() if sym in px else pd.Series(dtype=float, index=pd.DatetimeIndex([], tz="UTC"))
         s = s[(s.index >= pd.Timestamp(START, tz="UTC")) & (s.index <= pd.Timestamp(END, tz="UTC") + pd.Timedelta(days=1))]
         per_day = s.groupby(s.index.date).size()
         cdir = os.path.join(KH, "candles_1m", series)

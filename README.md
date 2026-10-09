@@ -298,3 +298,16 @@ accuracy (Brier) and a fee-inclusive trading rule, per index, on the live forwar
 `research/options_vs_kalshi.py` runs in `SMOKE=1` mode (data quality only) until then and refuses the full run
 before 2026-11-30. First smoke run, 5 days in: 37 snapshots per index, 36 with a valid options fit, about 170
 quoted contract-snapshots per index. At that rate the window should give roughly 1,300 per index.
+
+## Layer 7, how fast Kalshi prices an index move: pre-registered, collecting
+
+Pre-registered in `research/PREREGISTRATION_LAYER7.md` (commit d138dab) before any live statistic. For each minute
+from 6 hours to 10 minutes before the close, Kalshi's implied median close (from the bids-only range ladder) is
+regressed on the index's minute changes at lags -5 to +10. Verdicts per index: speed (minutes to 90% of the
+response), completeness (total response vs 1) and whether Kalshi leads, with day-bootstrap intervals, on the same
+forward window as layer 5 (2026-10-05 to 2026-11-27). A slow ladder would be the most direct edge a small trader could
+have; the prediction written down in advance is that the S&P ladder is fast and the Nasdaq one slower.
+
+`collect/intraday.py` now also saves ^GSPC and ^NDX minutes. `research/kalshi_reaction.py` runs in `SMOKE=1` mode
+until 2026-11-30; the Kalshi minute candles are downloaded after the window. First smoke run: 1,756 S&P index minutes
+on 5 days; ^NDX starts with the next collection run.
