@@ -334,6 +334,24 @@ in standard deviations and letting variance accrue evenly in calendar time. That
 the options probability's own calibration is reported as its check. `research/btc_options_vs_kalshi.py` reuses layer
 5's quote filter, fee, trade rule and bootstrap; `SMOKE=1` reports data quality until 2026-11-30.
 
+## Layer 9, exploratory: does public attention widen Kalshi's long-shot overpricing? No sign of it
+
+Hypothesis (2026-10-09): retail money chases what is in the news and buys cheap long shots, so Kalshi's long-shot
+overpricing should be larger after high-attention days. `collect/attention_history.py` pulls daily Wikipedia pageviews
+(S&P 500, Nasdaq-100, Stock market crash, Recession, Stock market) from April 2022; `research/explore_attention.py`
+compares overpricing (mid minus the 0/1 outcome) after the top fifth of abnormal-attention days with all other days,
+on the development sample only (calibration quotes before the holdout; 15,099 S&P and 17,402 Nasdaq quotes). Attention
+is the previous UTC day's views, because a UTC day runs past the close.
+
+Result: 48 comparisons (2 indices x 4 measures x 3 horizons x long shots or all quotes); 2 intervals exclude 0, about
+what chance gives, and their signs disagree across measures and horizons. On the S&P, long shots one hour out were if
+anything less overpriced after high attention (-2.2 cents, -4.7 to +0.1). The closest to the hypothesis: Nasdaq
+long shots one hour out after high Nasdaq-100 page views, +1.6 cents (-0.2 to +3.2), one cherry-pick among 48.
+
+Verdict: not pursued. A forward test of the best of 48 would be a test of a selected fluke, and the 8-week window
+would hold about 70 such quotes, too few to see a 1.6-cent effect. Daily Wikipedia views are one channel; intraday
+news volume (GDELT) is untested, and is worth revisiting only if layer 5's forward test finds a gap to explain.
+
 ## Paper trading the layer 5 rule
 
 `trade/paper.py` runs layer 5's trading rule live: after every collection run it fits the options, checks each
