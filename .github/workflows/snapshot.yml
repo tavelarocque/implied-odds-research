@@ -37,6 +37,11 @@ jobs:
           python kalshi_snapshot.py
           python polymarket_snapshot.py
 
+      - name: Paper trade (layer 5 rule, decisions only)
+        continue-on-error: true
+        run: |
+          pip install --quiet numpy pandas scipy
+          python trade/paper.py live
       - name: One-minute S&P prices (late-day runs, and manual test runs)
         if: github.event_name == 'workflow_dispatch' || github.event.schedule != ''
         run: |
