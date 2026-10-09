@@ -311,3 +311,16 @@ have; the prediction written down in advance is that the S&P ladder is fast and 
 `collect/intraday.py` now also saves ^GSPC and ^NDX minutes. `research/kalshi_reaction.py` runs in `SMOKE=1` mode
 until 2026-11-30; the Kalshi minute candles are downloaded after the window. First smoke run: 1,756 S&P index minutes
 on 5 days; ^NDX starts with the next collection run.
+
+## Paper trading the layer 5 rule
+
+`trade/paper.py` runs layer 5's trading rule live: after every collection run it fits the options, checks each
+same-day Kalshi range against the rule (3 cents past the touch, at least 100 contracts shown, one trade per contract
+per day, Kalshi's fee per 100-lot) and writes its decisions to `data/raw/paper/` on the data branch. Git timestamps
+every decision when it is made, so the log cannot use later information, and each trade records the money it ties up
+until settlement. It imports layer 5's constants and helpers, and `replay --check` confirms it fires exactly the
+trades layer 5's backtest does (41 of 41 on the first five days). Profit is sealed like layer 5: `report` refuses to
+run before 2026-11-30.
+
+Replay of the first five days (decisions only): 18 S&P and 23 Nasdaq trades. Capital tied up per day was a median of
+about $200 per index, because most trades are in cheap tail ranges.
