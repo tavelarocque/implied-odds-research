@@ -312,6 +312,14 @@ have; the prediction written down in advance is that the S&P ladder is fast and 
 until 2026-11-30; the Kalshi minute candles are downloaded after the window. First smoke run: 1,756 S&P index minutes
 on 5 days; ^NDX starts with the next collection run.
 
+**Layer 7b, the hourly contracts.** Kalshi also lists hourly S&P and Nasdaq "at or above K at the hour" contracts
+(KXINXU, KXNASDAQ100U). In their last hour they are close to a bet on the next few minutes of the index, so they are
+where a slow quote would matter most. `research/PREREGISTRATION_LAYER7B.md` applies layer 7's method and decision rules
+to every hourly event, 60 to 5 minutes before its close, on the same window; run with `--hourly`. Only strikes within
+1% of each event's settled value are downloaded (`kalshi_history.py candles ... --near 1`), about 30 (S&P) to 60 (Nasdaq) files per event.
+Data quality on one day (2026-10-08): all 14 events usable, the implied median defined in 51 to 56 of 56 minutes and
+changing in about 95% of them. Prediction: the hourly contracts are faster than the daily ladder.
+
 ## Paper trading the layer 5 rule
 
 `trade/paper.py` runs layer 5's trading rule live: after every collection run it fits the options, checks each

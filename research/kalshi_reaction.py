@@ -4,10 +4,13 @@ index move?
 Run from the project root:
     SMOKE=1 python3 research/kalshi_reaction.py     data quality only: index minutes per day, candle files on disk
     python3 research/kalshi_reaction.py             full analysis; refuses to run before 2026-11-30
-Before the full run, download the window's candles:
-    python3 collect/kalshi_history.py markets --series KXINX KXNASDAQ100
-    python3 collect/kalshi_history.py candles --series KXINX KXNASDAQ100 --period 1 --since 2026-10-05
-Output: research/output/kalshi_reaction/
+    add --hourly for layer 7b (research/PREREGISTRATION_LAYER7B.md): the hourly above/below contracts
+Before the full run, download the window's candles (from collect/):
+    python3 kalshi_history.py markets --series KXINX KXNASDAQ100
+    python3 kalshi_history.py candles --series KXINX KXNASDAQ100 --period 1 --since 2026-10-05
+    python3 kalshi_history.py markets --series KXINXU KXNASDAQ100U --since 2026-10-05
+    python3 kalshi_history.py candles --series KXINXU KXNASDAQ100U --period 1 --since 2026-10-05 --hours-before 1.2 --near 1
+Output: research/output/kalshi_reaction/ (hourly: research/output/kalshi_reaction_hourly/)
 """
 import gzip, io, json, os, subprocess, sys
 from datetime import datetime, date
@@ -24,8 +27,12 @@ SERIES = {"KXINX": ("^GSPC", "S&P 500"), "KXNASDAQ100": ("^NDX", "Nasdaq-100")}
 LAGS = list(range(-5, 11))
 FIRST, LAST, N_BOOT = 360, 10, 2000
 SMOKE = os.environ.get("SMOKE") == "1"
+HOURLY = "--hourly" in sys.argv
+# Layer 7b: each hourly above/below event, from 60 to 5 minutes before its close, strikes within 1% of the settled value.
+SERIES_H = {"KXINXU": ("^GSPC", "S&P 500"), "KXNASDAQ100U": ("^NDX", "Nasdaq-100")}
+H_FIRST, H_LAST, NEAR = 60, 5, 0.01
 KH = os.path.join(ROOT, "data", "history", "kalshi")
-OUT = os.path.join(ROOT, "research", "output", "kalshi_reaction")
+OUT = os.path.join(ROOT, "research", "output", "kalshi_reaction" + ("_hourly" if HOURLY else ""))
 rng = np.random.default_rng(7)
 
 
@@ -50,10 +57,17 @@ def index_minutes():
 
 
 def load_markets(series):
-    rows = [json.loads(l) for l in gzip.open(os.path.join(KH, f"markets_{series}.jsonl.gz"), "rt")]
-    df = pd.DataFrame(rows)
+    """The window's markets only, filtered while reading: the hourly series files hold close to a million rows."""
+    keep = ("strike_type", "floor_strike", "cap_strike", "close_time", "event_ticker", "ticker", "expiration_value",
+            "result", "yes_sub_title", "subtitle", "title")
+    rows = []
+    for l in gzip.open(os.path.join(KH, f"markets_{series}.jsonl.gz"), "rt"):
+        m = json.loads(l)
+        if START <= (m.get("close_time") or "")[:10] <= END:
+            rows.append(m if not HOURLY else {k: m.get(k) for k in keep})
+    df = pd.DataFrame(rows, columns=None if rows else ["close_time", "ticker", "event_ticker", "strike_type"])
     df["day"] = df.close_time.str[:10]
-    return df[(df.day >= START) & (df.day <= END)]
+    return df
 
 
 def ladder_median(lad):
@@ -78,8 +92,75 @@ def ladder_median(lad):
 
 
 def bid_px(c, k):
-    v = (c.get("yes_bid") or {}).get(k)
-    return np.nan if v in (None, "") else float(v)
+    """Yes bid in dollars. Candles name the field `close` (archived, dollars string; oldest, integer cents) or
+    `close_dollars` (current API); the same three formats as research/calibration.py's dollars()."""
+    b = c.get("yes_bid") or {}
+    v = b.get(f"{k}_dollars")
+    if v in (None, ""):
+        v = b.get(k)
+        if v in (None, ""):
+            return np.nan
+        if not isinstance(v, str):
+            return float(v) / 100
+    return float(v)
+
+
+assert bid_px({"yes_bid": {"close_dollars": "0.12"}}, "close") == 0.12
+assert bid_px({"yes_bid": {"close": "0.1200"}}, "close") == 0.12 and bid_px({"yes_bid": {"close": 12}}, "close") == 0.12
+
+
+def bid_series(series, ticker, grid):
+    """A contract's yes bid at each grid minute: close of its last candle at or before it (None if no candles)."""
+    p = os.path.join(KH, "candles_1m", series, f"{ticker}.json.gz")
+    if not os.path.exists(p):
+        return None
+    cs = json.load(gzip.open(p, "rt")).get("candlesticks", [])
+    if not cs:
+        return None
+    ts = pd.to_datetime([c["end_period_ts"] for c in cs], unit="s", utc=True)
+    # A candle with no bid field means no update that minute, not a zero bid: carry the last bid forward.
+    s = pd.Series([bid_px(c, "close") for c in cs], index=ts).sort_index()
+    s = s[~s.index.duplicated(keep="last")].ffill()
+    first_open = next((v for v in (bid_px(c, "open") for c in cs) if np.isfinite(v)), 0.0)
+    return s.reindex(grid, method="ffill").fillna(first_open)
+
+
+def above_median(strikes, probs):
+    """Level where P(index >= K), read from the above contracts' bids, crosses 50%. Bids are made non-increasing in
+    the strike (running minimum), then interpolated linearly between the two strikes around 50%."""
+    k, p = np.asarray(strikes, float), np.asarray(probs, float)
+    o = np.argsort(k)
+    k, p = k[o], p[o]
+    keep = np.isfinite(p)
+    k, p = k[keep], np.minimum.accumulate(p[keep])
+    if len(k) < 3 or not (p[0] > 0.5 > p[-1]):
+        return np.nan                                        # 50% outside the downloaded strikes: undefined
+    i = int(np.argmax(p < 0.5))
+    return float(k[i - 1] + (p[i - 1] - 0.5) / (p[i - 1] - p[i]) * (k[i] - k[i - 1]))
+
+
+assert above_median([10, 20, 30], [0.9, 0.6, 0.2]) == 22.5 and np.isnan(above_median([10, 20, 30], [0.4, 0.3, 0.2]))
+
+
+def hourly_medians(series, day_markets):
+    """For each hourly event (keyed by its close), the implied median of its above contracts per minute, 60 to 5
+    minutes before the close."""
+    out = {}
+    for ev, ms in day_markets.groupby("event_ticker"):
+        ms = ms[ms.strike_type == "greater_or_equal"].copy()
+        close = pd.Timestamp(ms.close_time.iloc[0]) if len(ms) else None
+        if close is None or close.minute != 0:
+            continue
+        v = pd.to_numeric(ms.expiration_value, errors="coerce")
+        ms = ms[(pd.to_numeric(ms.floor_strike) - v).abs() <= NEAR * v]
+        grid = pd.date_range(close - pd.Timedelta(minutes=H_FIRST), close - pd.Timedelta(minutes=H_LAST), freq="1min")
+        bids = {t: b for t in ms.ticker if (b := bid_series(series, t, grid)) is not None}
+        if len(ms) < 3 or len(bids) < len(ms) * 0.8:
+            continue
+        k = dict(zip(ms.ticker, pd.to_numeric(ms.floor_strike)))
+        out[close] = pd.Series({t: above_median([k[x] for x in bids], [bids[x][t] for x in bids]) for t in grid},
+                               dtype=float)
+    return out
 
 
 def kalshi_medians(series, day_markets):
@@ -91,20 +172,7 @@ def kalshi_medians(series, day_markets):
             continue
         close = pd.Timestamp(ms.close_time.iloc[0])
         grid = pd.date_range(close - pd.Timedelta(minutes=FIRST), close - pd.Timedelta(minutes=LAST), freq="1min")
-        bids = {}
-        for t in ms.ticker:
-            p = os.path.join(KH, "candles_1m", series, f"{t}.json.gz")
-            if not os.path.exists(p):
-                continue
-            cs = json.load(gzip.open(p, "rt")).get("candlesticks", [])
-            if not cs:
-                continue
-            ts = pd.to_datetime([c["end_period_ts"] for c in cs], unit="s", utc=True)
-            # A candle with no bid field means no update that minute, not a zero bid: carry the last bid forward.
-            s = pd.Series([bid_px(c, "close") for c in cs], index=ts).sort_index()
-            s = s[~s.index.duplicated(keep="last")].ffill()
-            first_open = next((v for v in (bid_px(c, "open") for c in cs) if np.isfinite(v)), 0.0)
-            bids[t] = s.reindex(grid, method="ffill").fillna(first_open)
+        bids = {t: b for t in ms.ticker if (b := bid_series(series, t, grid)) is not None}
         if len(bids) < len(ms) * 0.8:
             continue
         lad0 = make_ladder(ms.assign(bid=0.0, ask=np.nan).to_dict("records"))
@@ -112,12 +180,13 @@ def kalshi_medians(series, day_markets):
             lad = lad0.copy()
             lad["bid"] = [bids.get(tk, pd.Series(dtype=float)).get(t, 0.0) for tk in lad.ticker]
             out[t] = ladder_median(lad)
-    return pd.Series(out, dtype=float)
+    return {pd.Timestamp(day_markets.close_time.iloc[0]): pd.Series(out, dtype=float)} if out else {}
 
 
 def design(day_frame):
-    """Rows for one day: dM_t and lagged dS, lags within the day only."""
-    d = day_frame.copy()
+    """Rows for one contiguous block (a day, or one hourly event): dM_t and lagged dS. The block is put on a strict
+    one-minute clock first, so a missing minute leaves a gap instead of turning a 2-minute change into a 1-minute one."""
+    d = day_frame.sort_index().asfreq("1min")
     d["dM"], d["dS"] = d.M.diff(), d.S.diff()
     X = pd.DataFrame({f"L{j}": d.dS.shift(j) for j in LAGS})
     X["dM"] = d.dM
@@ -150,10 +219,11 @@ def ci(vals):
 
 
 def main():
+    SER, med = (SERIES_H, hourly_medians) if HOURLY else (SERIES, kalshi_medians)
     os.makedirs(OUT, exist_ok=True)
     px = index_minutes()
-    lines = [f"Window {START} to {END}. Data quality:"]
-    for series, (sym, name) in SERIES.items():
+    lines = [f"{'Hourly contracts (layer 7b). ' if HOURLY else ''}Window {START} to {END}. Data quality:"]
+    for series, (sym, name) in SER.items():
         s = px[sym].dropna() if sym in px else pd.Series(dtype=float, index=pd.DatetimeIndex([], tz="UTC"))
         s = s[(s.index >= pd.Timestamp(START, tz="UTC")) & (s.index <= pd.Timestamp(END, tz="UTC") + pd.Timedelta(days=1))]
         per_day = s.groupby(s.index.date).size()
@@ -172,15 +242,19 @@ def main():
 
     lines.append("")
     fits = {}
-    for series, (sym, name) in SERIES.items():
+    for series, (sym, name) in SER.items():
         mk = load_markets(series)
-        days = {}
+        days, blocks = {}, {}
         for day, dm in mk.groupby("day"):
-            M = kalshi_medians(series, dm)
-            if M.empty:
-                continue
-            frame = pd.DataFrame({"M": M, "S": px[sym].reindex(M.index)}).dropna()
-            X = design(frame)
+            parts = []
+            for close, M in med(series, dm).items():
+                M = M.dropna()
+                if M.empty:
+                    continue
+                X = design(pd.DataFrame({"M": M, "S": px[sym].reindex(M.index)}))
+                parts.append(X)
+                blocks.setdefault(close.tz_convert("America/New_York").strftime("%H:%M") if HOURLY else None, []).append(X)
+            X = pd.concat(parts) if parts else pd.DataFrame()
             if len(X) >= 60:
                 days[day] = X
         if not days:
@@ -197,15 +271,20 @@ def main():
                      f"({t90[0]:.0f} to {t90[1]:.0f}) -> {speed}")
         lines.append(f"  lead sum {full['lead']:+.3f} ({lead[0]:+.3f} to {lead[1]:+.3f}) -> {leadv}")
         lines.append("  lag coefficients: " + ", ".join(f"{j}:{full['b'][j]:+.3f}" for j in LAGS))
-        hrs = {}
-        for day, X in days.items():
-            n = len(X)
-            for lbl, sl in (("6-4", slice(0, n // 3)), ("4-2", slice(n // 3, 2 * n // 3)), ("2-0", slice(2 * n // 3, n))):
-                hrs.setdefault(lbl, []).append(X.iloc[sl])
-        lines.append("  by hours to close (reported only): " + ", ".join(
-            f"{k}: B {fit(pd.concat(v))['B']:.2f}, 90% {fit(pd.concat(v))['t90']} min" for k, v in hrs.items()))
+        if HOURLY:
+            groups = {k: v for k, v in sorted(blocks.items()) if sum(map(len, v)) >= 200}
+            label = "by event close, ET (reported only): "
+        else:
+            groups = {}
+            for day, X in days.items():
+                n = len(X)
+                for lbl, sl in (("6-4", slice(0, n // 3)), ("4-2", slice(n // 3, 2 * n // 3)), ("2-0", slice(2 * n // 3, n))):
+                    groups.setdefault(lbl, []).append(X.iloc[sl])
+            label = "by hours to close (reported only): "
+        lines.append("  " + label + ", ".join(
+            f"{k}: B {fit(pd.concat(v))['B']:.2f}, 90% {fit(pd.concat(v))['t90']} min" for k, v in groups.items()))
     if len(fits) == 2:
-        (dA, _), (dB, _) = fits["KXINX"], fits["KXNASDAQ100"]
+        (dA, _), (dB, _) = (fits[k] for k in SER)
         common = sorted(set(dA) & set(dB))
         diffs = []
         for _ in range(N_BOOT):

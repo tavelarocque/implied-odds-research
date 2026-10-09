@@ -4,6 +4,9 @@ Usage (run from the collect/ folder):
     python3 kalshi_history.py markets                 # settled market metadata + results, all series
     python3 kalshi_history.py candles --period 60     # hourly candles for every settled market
     python3 kalshi_history.py candles --period 1 --series KXINX --since 2026-09-01   # minute candles, a subset
+    python3 kalshi_history.py markets --series KXINXU --since 2026-10-05              # recent settled markets only
+    python3 kalshi_history.py candles --period 1 --series KXINXU --since 2026-10-05 --hours-before 1.2 --near 1
+                                                     # hourly above/below: strikes within 1% of the settled value
 
 Kalshi splits settled markets in two: recently settled ones come from /markets, and anything settled
 before the archive cutoff comes from /historical/markets. Both are pulled and merged. Everything is
@@ -19,6 +22,7 @@ SERIES = {
     "KXINXZ": "S&P 500 up on the day",
     "KXINXU": "S&P 500 above/below (hourly and daily)",
     "KXNASDAQ100": "Nasdaq-100 daily close range",
+    "KXNASDAQ100U": "Nasdaq-100 above/below (hourly and daily)",
     "KXNASDAQ100Z": "Nasdaq-100 up on the day",
     "INX": "S&P 500 daily range (legacy ticker)",
     "INXZ": "S&P 500 up (legacy ticker)",
@@ -43,19 +47,27 @@ def paged(url, params, key="markets"):
             return
 
 
-def pull_markets(series_list):
+def pull_markets(series_list, since=None):
+    """since (YYYY-MM-DD): only markets closing on/after it, from /markets alone (the archive holds older markets).
+    Rows already in the series file are kept, so a --since pull adds to the full history instead of replacing it."""
     os.makedirs(HIST, exist_ok=True)
     for s in series_list:
-        seen = {}
-        for src, url, params in (
-            ("live", f"{BASE}/markets", {"series_ticker": s, "status": "settled", "limit": 1000}),
-            ("archive", f"{BASE}/historical/markets", {"series_ticker": s, "limit": 1000}),
-        ):
+        seen = {r["ticker"]: r for r in load_markets(s)} if since else {}
+        live = {"series_ticker": s, "status": "settled", "limit": 1000}
+        if since:
+            live["min_close_ts"] = ts(since + "T00:00:00Z")
+        sources = [("live", f"{BASE}/markets", live)]
+        if not since:
+            sources.append(("archive", f"{BASE}/historical/markets", {"series_ticker": s, "limit": 1000}))
+        for src, url, params in sources:
             try:
                 for m in paged(url, params):
                     r = {k: v for k, v in m.items() if k not in DROP}
                     r["_source"] = src
-                    seen.setdefault(r["ticker"], r)
+                    if src == "live":
+                        seen[r["ticker"]] = r               # fresher than a row kept from an earlier pull
+                    else:
+                        seen.setdefault(r["ticker"], r)
             except Exception as e:
                 print(f"  {s} {src}: {e!r}", file=sys.stderr)
         rows = sorted(seen.values(), key=lambda r: r.get("close_time") or "")
@@ -80,12 +92,22 @@ def ts(iso):
     return int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp())
 
 
-def pull_candles(series_list, period, since=None, hours_before=None):
-    """period in minutes: 1, 60 or 1440. hours_before limits the window before close (default: market lifetime)."""
+def near_settlement(m, pct):
+    """Strike within pct% of the value the market settled on (above/below series; others always pass)."""
+    k, v = m.get("floor_strike") or m.get("cap_strike"), m.get("expiration_value")
+    if k is None or v in (None, ""):
+        return True
+    return abs(float(k) - float(v)) <= pct / 100 * float(v)
+
+
+def pull_candles(series_list, period, since=None, hours_before=None, near=None):
+    """period in minutes: 1, 60 or 1440. hours_before limits the window before close (default: market lifetime).
+    near (percent) keeps only strikes within that distance of the settled value."""
     for s in series_list:
         outdir = os.path.join(HIST, f"candles_{period}m", s)
         os.makedirs(outdir, exist_ok=True)
-        ms = [m for m in load_markets(s) if not since or (m.get("close_time") or "") >= since]
+        ms = [m for m in load_markets(s) if (not since or (m.get("close_time") or "") >= since)
+              and (near is None or near_settlement(m, near))]
         done = fetched = failed = 0
         for m in ms:
             t = m["ticker"]
@@ -127,8 +149,9 @@ if __name__ == "__main__":
     ap.add_argument("--period", type=int, default=60, choices=[1, 60, 1440])
     ap.add_argument("--since", help="only markets closing on/after this date, YYYY-MM-DD")
     ap.add_argument("--hours-before", type=float, help="only the last N hours before each market closes")
+    ap.add_argument("--near", type=float, help="only strikes within this percent of the settled value")
     a = ap.parse_args()
     if a.what == "markets":
-        pull_markets(a.series)
+        pull_markets(a.series, a.since)
     else:
-        pull_candles(a.series, a.period, a.since, a.hours_before)
+        pull_candles(a.series, a.period, a.since, a.hours_before, a.near)
