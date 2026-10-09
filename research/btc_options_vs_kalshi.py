@@ -25,58 +25,73 @@ SMOKE = os.environ.get("SMOKE") == "1"
 OUT = os.path.join(ROOT, "research", "output", "btc_options_vs_kalshi")
 
 
+def snapshot_rows(krows, drows):
+    """One Kalshi crypto snapshot, with its paired Deribit snapshot (None if none within 3 minutes): a data-quality
+    record per event and a row per contract. Shared with trade/paper.py so live paper trades use this exact code."""
+    collected = L5.utc(krows[0]["collected_utc"])
+    markets = [m for m in krows if m.get("type") == "market" and m.get("series") == SERIES
+               and m.get("strike_type") == "greater"]
+    log, rows, fits = [], [], {}
+    for ev in sorted({m["event_ticker"] for m in markets}):
+        em = [m for m in markets if m["event_ticker"] == ev]
+        close = L5.utc(em[0]["close_time"])
+        secs = (close - collected).total_seconds()
+        kind = "daily" if L5.utc(em[0]["open_time"]) <= close - pd.Timedelta(hours=2) else "hourly"
+        rec = {"day": close.strftime("%Y-%m-%d"), "snap": krows[0]["collected_utc"], "event": ev, "kind": kind,
+               "paired": False, "fit": False, "n": len(em), "quoted": 0}
+        log.append(rec)
+        if secs < L5.MIN_TO_CLOSE_S or drows is None:
+            continue
+        rec["paired"] = True
+        spot = float(drows[0]["index_price"])
+        opts = [r for r in drows[1:] if r.get("type") == "option"]
+        expiries = sorted({o["expiry"] for o in opts if L5.utc(o["expiry"]) >= close})
+        try:
+            exp = L5.utc(expiries[0])
+            if exp not in fits:
+                fits[exp] = deribit_surface(opts, exp, collected)
+            surf = at_time(fits[exp], secs / YEAR, spot)
+            c = surf.checks()
+            ok = abs(c["mass"] - 1) <= 0.05 and c["negative_mass"] < 0.01
+        except Exception:
+            ok = False
+        rec["fit"] = ok
+        if not ok:
+            continue
+        for m in em:
+            bid, ask, bsz, asz = L5.kalshi_quote(m)
+            K = float(m["floor_strike"])
+            covers = surf.in_fitted_range(K)
+            quoted = bid > 0 and ask is not None and ask - bid <= L5.MAX_SPREAD
+            rec["quoted"] += bool(quoted and covers)
+            rows.append({"day": rec["day"], "snap": rec["snap"], "hours_to_close": secs / 3600, "kind": kind,
+                         "event": ev, "ticker": m["ticker"], "strike": K, "bid": bid, "ask": ask,
+                         "bid_size": bsz, "ask_size": asz, "p_opt": float(surf.prob_above(K)),
+                         "spot": spot, "covers": covers, "quoted": bool(quoted)})
+    return log, rows
+
+
+def kept_snapshots(names):
+    """Layer 5's spacing rule: runs closer than 10 minutes to the previous kept one are dropped (the earlier is kept)."""
+    kept, last = [], -10 ** 9
+    for k in sorted(names, key=L5.stamp_seconds):
+        t = L5.stamp_seconds(k)
+        if t - last >= L5.MIN_GAP_S:
+            kept.append(k); last = t
+    return kept
+
+
 def build_panel():
     L5.START, L5.END = START, END                       # git_files filters days on these
     files = L5.git_files()
     rows, log = [], []
     for day in sorted(files[KK]):
-        kept, last = [], -10 ** 9
-        for k in sorted(files[KK][day], key=L5.stamp_seconds):
+        for k in kept_snapshots(files[KK][day]):
             t = L5.stamp_seconds(k)
-            if t - last >= L5.MIN_GAP_S:
-                kept.append(k); last = t
-        for k in kept:
-            t = L5.stamp_seconds(k)
-            krows = L5.load(k)
-            collected = L5.utc(krows[0]["collected_utc"])
             near = min(files[DK].get(day, []), key=lambda o: abs(L5.stamp_seconds(o) - t), default=None)
-            markets = [m for m in krows if m.get("type") == "market" and m.get("series") == SERIES
-                       and m.get("strike_type") == "greater"]
-            for ev in sorted({m["event_ticker"] for m in markets}):
-                em = [m for m in markets if m["event_ticker"] == ev]
-                close = L5.utc(em[0]["close_time"])
-                secs = (close - collected).total_seconds()
-                kind = "daily" if L5.utc(em[0]["open_time"]) <= close - pd.Timedelta(hours=2) else "hourly"
-                rec = {"day": close.strftime("%Y-%m-%d"), "snap": krows[0]["collected_utc"], "event": ev, "kind": kind,
-                       "paired": False, "fit": False, "n": len(em), "quoted": 0}
-                log.append(rec)
-                if secs < L5.MIN_TO_CLOSE_S or near is None or abs(L5.stamp_seconds(near) - t) > L5.MAX_PAIR_S:
-                    continue
-                rec["paired"] = True
-                drows = L5.load(near)
-                spot = float(drows[0]["index_price"])
-                opts = [r for r in drows[1:] if r.get("type") == "option"]
-                expiries = sorted({o["expiry"] for o in opts if L5.utc(o["expiry"]) >= close})
-                try:
-                    exp = L5.utc(expiries[0])
-                    surf = at_time(deribit_surface(opts, exp, collected), secs / YEAR, spot)
-                    c = surf.checks()
-                    ok = abs(c["mass"] - 1) <= 0.05 and c["negative_mass"] < 0.01
-                except Exception:
-                    ok = False
-                rec["fit"] = ok
-                if not ok:
-                    continue
-                for m in em:
-                    bid, ask, bsz, asz = L5.kalshi_quote(m)
-                    K = float(m["floor_strike"])
-                    covers = surf.in_fitted_range(K)
-                    quoted = bid > 0 and ask is not None and ask - bid <= L5.MAX_SPREAD
-                    rec["quoted"] += bool(quoted and covers)
-                    rows.append({"day": rec["day"], "snap": rec["snap"], "hours_to_close": secs / 3600, "kind": kind,
-                                 "event": ev, "ticker": m["ticker"], "strike": K, "bid": bid, "ask": ask,
-                                 "bid_size": bsz, "ask_size": asz, "p_opt": float(surf.prob_above(K)),
-                                 "spot": spot, "covers": covers, "quoted": bool(quoted)})
+            drows = L5.load(near) if near is not None and abs(L5.stamp_seconds(near) - t) <= L5.MAX_PAIR_S else None
+            lg, rw = snapshot_rows(L5.load(k), drows)
+            log += lg; rows += rw
     return pd.DataFrame(rows), pd.DataFrame(log)
 
 

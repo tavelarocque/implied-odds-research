@@ -13,9 +13,11 @@ itself is frozen until the layer 5 analysis on 2026-11-30, and `report` (the poo
 
 Run from the project root:
     python3 trade/paper.py live            evaluate this run's snapshot (the GitHub workflow calls this)
+    python3 trade/paper.py live --btc      the same for Bitcoin (research/PREREGISTRATION_BTC.md; crypto workflow)
     python3 trade/paper.py replay          rerun the rule over the window so far from the data branch, decisions only
     python3 trade/paper.py replay --check  also confirm the replay matches layer 5's own trade logic exactly
-    python3 trade/paper.py digest [N]      the last N trading days' trades and whether each won (default 1)
+    python3 trade/paper.py digest [N]      the last N stock trading days' trades and the last N x 24 h of Bitcoin
+                                           trades, and whether each won (default 1)
     python3 trade/paper.py report          on or after 2026-11-30: settle the live log; profit, capital, worst day
 """
 import glob, gzip, io, json, os, subprocess, sys
@@ -103,11 +105,11 @@ def read_gz(path=None, blob=None):
     return [json.loads(l) for l in f]
 
 
-def logged_runs(day):
+def logged_runs(day, log="paper"):
     """Paper files already on the data branch for this day: (seconds, rows) per earlier run."""
     # GitHub's checkout has no origin/data ref, so name it explicitly. Same objects the workflow's save step fetches.
     subprocess.run(["git", "fetch", "-q", "origin", "+refs/heads/data:refs/remotes/origin/data"], cwd=ROOT, check=True)
-    names = subprocess.run(["git", "ls-tree", "-r", "--name-only", "origin/data", f"data/raw/paper/{day}/"],
+    names = subprocess.run(["git", "ls-tree", "-r", "--name-only", "origin/data", f"data/raw/{log}/{day}/"],
                            cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
     return [(L5.stamp_seconds(n), L5.load(n)) for n in sorted(names, key=L5.stamp_seconds)]
 
@@ -160,13 +162,76 @@ def live():
         print(f"paper: settlement check failed ({e}); will retry next run")
 
 
-def all_trades():
+def btc_signal(r):
+    """Layer 5's rule on one Bitcoin contract row (research/btc_options_vs_kalshi.py), same order as L5.trades."""
+    if not (r["quoted"] and r["covers"]):
+        return None
+    base = {"type": "trade", "series": "KXBTCD", **{k: r[k] for k in ("day", "snap", "event", "ticker", "strike", "bid",
+            "ask", "bid_size", "ask_size", "p_opt", "spot", "hours_to_close", "kind")}}
+    if r["bid"] - r["p_opt"] > L5.THRESH and r["bid_size"] >= L5.MIN_SIZE:
+        return sized({**base, "side": "sell", "price": float(r["bid"])})
+    if r["p_opt"] - r["ask"] > L5.THRESH and r["ask_size"] >= L5.MIN_SIZE:
+        return sized({**base, "side": "buy", "price": float(r["ask"])})
+    return None
+
+
+def live_btc():
+    """The Bitcoin version (research/PREREGISTRATION_BTC.md), run by .github/workflows/crypto.yml after each snapshot.
+    Logs to data/raw/paper_btc/, results to data/raw/paper_btc_results/."""
+    import btc_options_vs_kalshi as BTC
+    now = datetime.now(timezone.utc)
+    day = now.strftime("%Y-%m-%d")
+    ks = sorted(glob.glob(os.path.join(RAW, BTC.KK, day, f"{BTC.KK}_*Z.jsonl.gz")), key=L5.stamp_seconds)
+    if not ks:
+        print("paper btc: no Kalshi crypto snapshot from today on disk"); return
+    kpath = ks[-1]
+    krows = read_gz(kpath)
+    t = L5.stamp_seconds(kpath)
+    age = (now - L5.utc(krows[0]["collected_utc"])).total_seconds()
+    if age > MAX_AGE_S:
+        print(f"paper btc: newest snapshot is {age:.0f} s old, not trading on it"); return
+    run = {"type": "run", "day": day, "snap": krows[0]["collected_utc"], "decided_utc": now.isoformat(),
+           "commit": os.environ.get("GITHUB_SHA", "local"), "evaluated": False}
+    yday = (now - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+    earlier, before = logged_runs(day, "paper_btc"), logged_runs(yday, "paper_btc")
+    evaluated = [s for s, rows in earlier if rows and rows[0].get("evaluated")]
+    traded = {r["ticker"] for _, rows in earlier + before for r in rows if r.get("type") == "trade"}
+    trades = []
+    if evaluated and t - evaluated[-1] < L5.MIN_GAP_S:
+        run["reason"] = "within 10 minutes of the last evaluated snapshot"
+    else:
+        files = glob.glob(os.path.join(RAW, BTC.DK, day, f"{BTC.DK}_*Z.jsonl.gz"))
+        near = min(files, key=lambda o: abs(L5.stamp_seconds(o) - t), default=None)
+        drows = read_gz(near) if near is not None and abs(L5.stamp_seconds(near) - t) <= L5.MAX_PAIR_S else None
+        log, rows = BTC.snapshot_rows(krows, drows)
+        sig = [x for x in map(btc_signal, rows) if x]
+        trades = [x for x in sig if x["ticker"] not in traded]
+        run.update(evaluated=True, notes={r["event"]: ("fit failed" if r["paired"] and not r["fit"] else
+                   "no Deribit snapshot or under 5 minutes" if not r["paired"] else f"{r['quoted']} quoted") for r in log},
+                   signals=len(sig), new_trades=len(trades))
+    d = os.path.join(RAW, "paper_btc", day)
+    os.makedirs(d, exist_ok=True)
+    out = os.path.join(d, f"paper_btc_{os.path.basename(kpath).split('_')[-1]}")
+    with gzip.open(out, "wt") as f:
+        for r in [run] + trades:
+            f.write(json.dumps(r) + "\n")
+    print(f"paper btc: {run.get('reason') or run['notes']}; {len(trades)} new trades -> {os.path.relpath(out, ROOT)}")
+    for x in trades:
+        print(f"  {x['side']:<4} {x['qty']} {x['ticker']} at {100 * x['price']:.0f}c (options {100 * x['p_opt']:.1f}c), "
+              f"ties up ${x['capital']:.2f}")
+    try:
+        settle(extra={day: trades}, log="paper_btc", res="paper_btc_results")
+    except Exception as e:
+        print(f"paper btc: settlement check failed ({e}); will retry next run")
+
+
+def all_trades(log="paper", res="paper_results"):
     """Every live trade on the data branch, by day, plus the settlement results recorded so far."""
-    names = subprocess.run(["git", "ls-tree", "-r", "--name-only", "origin/data", "data/raw/paper/", "data/raw/paper_results/"],
+    names = subprocess.run(["git", "ls-tree", "-r", "--name-only", "origin/data", f"data/raw/{log}/", f"data/raw/{res}/"],
                            cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
     trades, results = {}, {}
     for n in sorted(names):
-        if n.startswith("data/raw/paper_results/"):
+        if n.startswith(f"data/raw/{res}/"):
             results[os.path.basename(n)[:10]] = json.loads(subprocess.run(
                 ["git", "show", f"origin/data:{n}"], cwd=ROOT, capture_output=True, check=True).stdout)
         else:
@@ -174,58 +239,71 @@ def all_trades():
     return trades, results
 
 
-def settle(extra=None):
-    """Ask Kalshi for the result of every logged trade not yet settled; write data/raw/paper_results/<day>.json."""
+def settle(extra=None, log="paper", res="paper_results"):
+    """Ask Kalshi for the result of every logged trade not yet settled; write data/raw/<res>/<day>.json."""
     sys.path.insert(0, os.path.join(ROOT, "collect"))
     from common import get_json
     BASE = "https://api.elections.kalshi.com/trade-api/v2"
-    trades, results = all_trades()
+    trades, results = all_trades(log, res)
     for d, ts in (extra or {}).items():
         trades.setdefault(d, []).extend(ts)
     for day, ts in trades.items():
-        res = dict(results.get(day, {}))
+        got = dict(results.get(day, {}))
         new = 0
-        for tk in sorted({t["ticker"] for t in ts} - set(res)):
+        for tk in sorted({t["ticker"] for t in ts} - set(got)):
             m = get_json(f"{BASE}/markets/{tk}").get("market", {})
             if m.get("result") in ("yes", "no"):
-                res[tk] = m["result"]; new += 1
+                got[tk] = m["result"]; new += 1
         if new:
-            d = os.path.join(RAW, "paper_results")
+            d = os.path.join(RAW, res)
             os.makedirs(d, exist_ok=True)
-            json.dump(res, open(os.path.join(d, f"{day}.json"), "w"), indent=0, sort_keys=True)
+            json.dump(got, open(os.path.join(d, f"{day}.json"), "w"), indent=0, sort_keys=True)
             print(f"paper: settled {new} trades from {day}")
 
 
+def pnl_of(t, r):
+    y = 1.0 if r == "yes" else 0.0
+    return t["qty"] * ((y - t["price"]) if t["side"] == "buy" else (t["price"] - y)) - t["fee"]
+
+
 def digest(days_back=1):
-    """Plain-English list of the latest trading days' decisions and, where settled, whether each won."""
+    """Plain-English list of the latest decisions and, where settled, whether each won: the last N stock trading days,
+    and Bitcoin trades made in the last 24 hours times N."""
     subprocess.run(["git", "fetch", "-q", "origin", "+refs/heads/data:refs/remotes/origin/data"], cwd=ROOT, check=True)
-    trades, results = all_trades()
-    total, n_set, wins = 0.0, 0, 0
-    rows = []
-    for day in sorted(trades):
-        for t in sorted(trades[day], key=lambda t: t["snap"]):
-            r = results.get(day, {}).get(t["ticker"])
-            pnl = None
-            if r:
-                y = 1.0 if r == "yes" else 0.0
-                pnl = t["qty"] * ((y - t["price"]) if t["side"] == "buy" else (t["price"] - y)) - t["fee"]
-                total += pnl; n_set += 1; wins += pnl > 0
-            rows.append((day, t, r, pnl))
-    show = sorted(trades)[-days_back:] if trades else []
-    rng_ = lambda t: (f"{t['lo']:,.0f} to {t['hi']:,.0f}" if t["lo"] and t["hi"] else
-                      f"above {t['lo']:,.0f}" if t["lo"] else f"below {t['hi']:,.0f}")
-    for day in show:
-        print(f"{day}:")
-        for d, t, r, pnl in rows:
-            if d != day:
-                continue
-            when = pd.Timestamp(t["snap"]).tz_convert("America/Vancouver").strftime("%H:%M")
+    since = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=24 * days_back)
+    for title, log, res in (("Stocks (S&P 500, Nasdaq-100 daily ranges)", "paper", "paper_results"),
+                            ("Bitcoin (Kalshi hourly BTC)", "paper_btc", "paper_btc_results")):
+        trades, results = all_trades(log, res)
+        total, n_set, wins, rows = 0.0, 0, 0, []
+        for day in sorted(trades):
+            for t in sorted(trades[day], key=lambda t: t["snap"]):
+                r = results.get(day, {}).get(t["ticker"])
+                pnl = pnl_of(t, r) if r else None
+                if r:
+                    total += pnl; n_set += 1; wins += pnl > 0
+                rows.append((day, t, r, pnl))
+        if log == "paper":
+            keep = set(sorted(trades)[-days_back:])
+            show = [x for x in rows if x[0] in keep]
+        else:
+            show = [x for x in rows if pd.Timestamp(x[1]["snap"]) >= since]
+        print(f"{title}:")
+        for d, t, r, pnl in show:
+            when = pd.Timestamp(t["snap"]).tz_convert("America/Vancouver").strftime("%a %H:%M")
             what = "bought YES" if t["side"] == "buy" else "sold YES"
+            if log == "paper":
+                name = L5.NAMES[t["series"]]
+                rng_ = (f"{t['lo']:,.0f} to {t['hi']:,.0f}" if t["lo"] and t["hi"] else
+                        f"above {t['lo']:,.0f}" if t["lo"] else f"below {t['hi']:,.0f}")
+            else:
+                name, rng_ = "BTC", f"above ${t['strike']:,.0f} ({t['kind']}, {t['hours_to_close']:.1f} h to settle)"
             out = "open" if r is None else f"{'WON' if pnl > 0 else 'LOST'} ${pnl:+.2f} (settled {r.upper()})"
-            print(f"  {when} PT  {L5.NAMES[t['series']]:<10} {what} x{t['qty']} on {rng_(t)} at {100 * t['price']:.0f}c "
+            print(f"  {when} PT  {name:<10} {what} x{t['qty']} on {rng_} at {100 * t['price']:.0f}c "
                   f"(options said {100 * t['p_opt']:.1f}c) -> {out}")
-    print(f"Since live start: {sum(len(v) for v in trades.values())} trades, {n_set} settled, {wins} won, "
-          f"{n_set - wins} lost, net ${total:+.2f} after fees")
+        if not show:
+            print("  no trades in this period")
+        print(f"  Since live start: {sum(len(v) for v in trades.values())} trades, {n_set} settled, {wins} won, "
+              f"{n_set - wins} lost, net ${total:+.2f} after fees")
 
 
 def replay(check=False):
@@ -314,7 +392,7 @@ def report():
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd == "live":
-        live()
+        live_btc() if "--btc" in sys.argv else live()
     elif cmd == "replay":
         replay(check="--check" in sys.argv)
     elif cmd == "report":
