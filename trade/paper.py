@@ -13,7 +13,9 @@ itself is frozen until the layer 5 analysis on 2026-11-30, and `report` (the poo
 
 Run from the project root:
     python3 trade/paper.py live            evaluate this run's snapshot (the GitHub workflow calls this)
-    python3 trade/paper.py live --btc      the same for Bitcoin (research/PREREGISTRATION_BTC.md; crypto workflow)
+    python3 trade/paper.py live --btc      the same for Bitcoin (research/PREREGISTRATION_BTC.md; crypto workflow), then
+                                           layer 11's rule (research/PREREGISTRATION_LAYER11.md, test B) when the
+                                           snapshot is 2.5-3.5 h before the 5pm ET set settles
     python3 trade/paper.py replay          rerun the rule over the window so far from the data branch, decisions only
     python3 trade/paper.py replay --check  also confirm the replay matches layer 5's own trade logic exactly
     python3 trade/paper.py digest [N]      the last N stock trading days' trades and the last N x 24 h of Bitcoin
@@ -223,6 +225,89 @@ def live_btc():
         settle(extra={day: trades}, log="paper_btc", res="paper_btc_results")
     except Exception as e:
         print(f"paper btc: settlement check failed ({e}); will retry next run")
+    try:
+        live_l11(krows, kpath, now)
+        settle(log="paper_l11", res="paper_l11_results")
+    except Exception as e:                                  # never let layer 11 break the layer 5 paper trader
+        print(f"paper l11: failed ({e})")
+
+
+L11_FG, L11_FUNDING, L11_H, L11_TOL_H = 25, 0.0000149, 3.0, 0.5
+
+
+def l11_mood(close):
+    """Layer 11's two signals as known at decision time (research/PREREGISTRATION_LAYER11.md). Either can be None if
+    its source is unreachable; the forward test itself is computed afterwards from the histories."""
+    sys.path.insert(0, os.path.join(ROOT, "collect"))
+    from common import get_json
+    fg = None
+    try:
+        for x in get_json("https://api.alternative.me/fng/?limit=3&format=json")["data"]:
+            if datetime.fromtimestamp(int(x["timestamp"]), timezone.utc).strftime("%Y-%m-%d") == close.strftime("%Y-%m-%d"):
+                fg = int(x["value"])
+    except Exception:
+        pass
+    funding = None
+    try:
+        end = close - pd.Timedelta(hours=6)
+        page = get_json("https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&startTime="
+                        f"{int((end - pd.Timedelta(hours=30)).timestamp() * 1000)}&limit=20", retries=2)
+        r = [float(p["fundingRate"]) for p in page
+             if end - pd.Timedelta(hours=24) < pd.Timestamp(p["fundingTime"], unit="ms", tz="UTC") <= end]
+        funding = float(np.mean(r)) if r else None
+    except Exception:
+        pass
+    return fg, funding
+
+
+def live_l11(krows, kpath, now):
+    """Layer 11 live (test B): on a bearish-mood day, at the one snapshot 2.5 to 3.5 hours before the 5pm ET Bitcoin
+    set settles, buy YES at the ask on every contract with mid >= 90c and spread <= 10c (selling the downside long
+    shot). One evaluation per set. Logs to data/raw/paper_l11/, results to data/raw/paper_l11_results/."""
+    collected = L5.utc(krows[0]["collected_utc"])
+    ms = [m for m in krows if m.get("type") == "market" and m.get("series") == "KXBTCD"
+          and m["event_ticker"].endswith("17") and m.get("strike_type") == "greater"]
+    ms = [m for m in ms if abs((L5.utc(m["close_time"]) - collected).total_seconds() / 3600 - L11_H) <= L11_TOL_H]
+    if not ms:
+        return
+    ms = [m for m in ms if m["event_ticker"] == ms[0]["event_ticker"]]
+    close = L5.utc(ms[0]["close_time"])
+    h = (close - collected).total_seconds() / 3600
+    day = close.strftime("%Y-%m-%d")
+    if any(rows and rows[0].get("evaluated") for _, rows in logged_runs(day, "paper_l11")):
+        print("paper l11: this set was already evaluated"); return
+    fg, funding = l11_mood(close)
+    signal = (fg is not None and fg <= L11_FG) or (funding is not None and funding <= L11_FUNDING)
+    run = {"type": "run", "day": day, "event": ms[0]["event_ticker"], "snap": krows[0]["collected_utc"],
+           "decided_utc": now.isoformat(), "hours_to_close": h, "commit": os.environ.get("GITHUB_SHA", "local"),
+           "evaluated": True, "fear_greed": fg, "funding": funding, "signal": bool(signal)}
+    trades = []
+    if signal:
+        for m in ms:
+            bid, ask, bsz, asz = L5.kalshi_quote(m)
+            if not (bid > 0 and ask is not None and ask < 1 and ask - bid <= 0.10 and (bid + ask) / 2 >= 0.90):
+                continue
+            trades.append(sized({"type": "trade", "series": "KXBTCD", "rule": "layer11", "day": day,
+                                 "snap": run["snap"], "event": m["event_ticker"], "ticker": m["ticker"],
+                                 "strike": float(m["floor_strike"]), "bid": bid, "ask": ask, "bid_size": bsz,
+                                 "ask_size": asz, "hours_to_close": h, "side": "buy", "price": float(ask)}))
+    run["new_trades"] = len(trades)
+    d = os.path.join(RAW, "paper_l11", day)
+    os.makedirs(d, exist_ok=True)
+    out = os.path.join(d, f"paper_l11_{os.path.basename(kpath).split('_')[-1]}")
+    with gzip.open(out, "wt") as f:
+        for r in [run] + trades:
+            f.write(json.dumps(r) + "\n")
+    print(f"paper l11: F&G {fg}, funding {funding}; signal {'YES' if signal else 'no'}; {len(trades)} trades "
+          f"-> {os.path.relpath(out, ROOT)}")
+    for x in trades:
+        print(f"  buy {x['qty']} YES {x['ticker']} at {100 * x['price']:.0f}c, ties up ${x['capital']:.2f}")
+
+
+def l11_runs():
+    names = subprocess.run(["git", "ls-tree", "-r", "--name-only", "origin/data", "data/raw/paper_l11/"],
+                           cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
+    return [L5.load(n)[0] for n in sorted(names)]
 
 
 def all_trades(log="paper", res="paper_results"):
@@ -272,7 +357,9 @@ def digest(days_back=1):
     subprocess.run(["git", "fetch", "-q", "origin", "+refs/heads/data:refs/remotes/origin/data"], cwd=ROOT, check=True)
     since = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=24 * days_back)
     for title, log, res in (("Stocks (S&P 500, Nasdaq-100 daily ranges)", "paper", "paper_results"),
-                            ("Bitcoin (Kalshi hourly BTC)", "paper_btc", "paper_btc_results")):
+                            ("Bitcoin (Kalshi hourly BTC)", "paper_btc", "paper_btc_results"),
+                            ("Bitcoin layer 11 (sell downside long shots on fear days, 3 h before 5pm ET)",
+                             "paper_l11", "paper_l11_results")):
         trades, results = all_trades(log, res)
         total, n_set, wins, rows = 0.0, 0, 0, []
         for day in sorted(trades):
@@ -295,11 +382,18 @@ def digest(days_back=1):
                 name = L5.NAMES[t["series"]]
                 rng_ = (f"{t['lo']:,.0f} to {t['hi']:,.0f}" if t["lo"] and t["hi"] else
                         f"above {t['lo']:,.0f}" if t["lo"] else f"below {t['hi']:,.0f}")
-            else:
+            elif log == "paper_btc":
                 name, rng_ = "BTC", f"above ${t['strike']:,.0f} ({t['kind']}, {t['hours_to_close']:.1f} h to settle)"
+            else:
+                name, rng_ = "BTC L11", f"above ${t['strike']:,.0f} ({t['hours_to_close']:.1f} h to settle)"
             out = "open" if r is None else f"{'WON' if pnl > 0 else 'LOST'} ${pnl:+.2f} (settled {r.upper()})"
-            print(f"  {when} PT  {name:<10} {what} x{t['qty']} on {rng_} at {100 * t['price']:.0f}c "
-                  f"(options said {100 * t['p_opt']:.1f}c) -> {out}")
+            why = f"(options said {100 * t['p_opt']:.1f}c)" if "p_opt" in t else "(selling the long shot)"
+            print(f"  {when} PT  {name:<10} {what} x{t['qty']} on {rng_} at {100 * t['price']:.0f}c {why} -> {out}")
+        if log == "paper_l11":
+            for run in l11_runs():
+                if pd.Timestamp(run["snap"]) >= since:
+                    print(f"  {run['day']}: Fear & Greed {run['fear_greed']}, funding {run['funding']}; "
+                          f"signal {'YES' if run['signal'] else 'no'}, {run['new_trades']} trades")
         if not show:
             print("  no trades in this period")
         print(f"  Since live start: {sum(len(v) for v in trades.values())} trades, {n_set} settled, {wins} won, "

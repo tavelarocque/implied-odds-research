@@ -385,6 +385,27 @@ days when the "Stock market crash" Wikipedia page spikes (top fifth), the next s
 controls for recent moves. Reading: after a scare, short-dated options already price the jump the 30-day VIX averages
 away. A weak next-day hint at most, and not tradable without same-day S&P options. Not pursued.
 
+## Exploratory: predicting tomorrow's efficiency ratio. Real but tiny, and what helps is the trend
+
+`research/explore_efficiency.py`: a day's efficiency ratio is |close - open| / (high - low), near 1 when the market
+moved one way and held it, near 0 when it chopped. SPY daily bars 1993 to 2026-03 (Yahoo's ^GSPC opens before 2006 are
+just the previous close, so they cannot be used). A logistic regression on 15 features known at the close (realized
+volatility, efficiency today, its lags and 5/10/20-day means, variance ratio, false breakouts, distance from the 50-day
+average, chop streak and share, volatility change, range vs its 20-day mean) predicts whether tomorrow is a clean day
+(above the median). Walk-forward: train on all earlier years, test on the next, 1997 to 2026-03, 7,356 test days.
+
+**Predicting efficiency.** Out-of-sample AUC 0.522 (0.50 is a coin flip). It beats today's efficiency alone (0.481,
+difference +0.041, +0.020 to +0.063 by 20-day block bootstrap) and the 20-day mean (0.500; +0.022, +0.003 to +0.040).
+Real, and too small to act on by itself.
+
+**Does it beat the options?** On the days the model calls choppiest (its bottom fifth, cut-off from the training
+years), the next close-to-close move was 8% smaller relative to the VIX's one-day move than on other days (-13% to -2%),
+and 14% smaller relative to the 9-day VIX (-21% to -7%, 2011 on). That survives controlling for recent realized vs
+implied volatility and the VIX level. It does not survive adding one feature on its own: distance from the 50-day
+average. With that in the regression, the model's prediction adds nothing (VIX: +0.08, -0.51 to +0.66; VIX9D: +0.18,
+-0.97 to +1.29). Above-average markets move less than the VIX implies, a known pattern (the variance premium is
+larger in calm uptrends). The efficiency model's "choppy day" signal was mostly that.
+
 ## Layer 11, exploratory: Kalshi's Bitcoin long shots and crypto crowd mood. A candidate
 
 `research/explore_btc_sentiment.py`, development sample only: Kalshi's 5pm ET Bitcoin sets (KXBTCD) from 2024-03-20 to
@@ -420,7 +441,11 @@ trades layer 5's backtest does (41 of 41 on the first five days). Each run also 
 unsettled trade (`data/raw/paper_results/`), and `digest` lists the latest trades and whether each won. Outcomes are
 watched trade by trade from 2026-10-09; the rule stays frozen, and the pooled verdict (`report`, layer 5 rule 3) still
 waits for 2026-11-30. `live --btc` runs the same rule on Bitcoin (`research/PREREGISTRATION_BTC.md`) after every crypto
-snapshot, logging to `data/raw/paper_btc/`; `digest` shows both.
+snapshot, logging to `data/raw/paper_btc/`; `digest` shows both. The same step also runs layer 11's rule
+(`research/PREREGISTRATION_LAYER11.md`, test B): at the one crypto snapshot 2.5 to 3.5 hours before the 5pm ET set
+settles, it reads Fear & Greed and Binance funding and, on a signal day, buys YES at the ask on every contract with a
+mid of 90 cents or more, logging to `data/raw/paper_l11/` (every evaluation, signal or not, with the mood readings).
+The live log is a mirror for watching; test B itself is computed on or after 2027-02-01 from the histories.
 
 Replay of the first five days (decisions only): 18 S&P and 23 Nasdaq trades. Capital tied up per day was a median of
 about $200 per index: a 100-lot at these prices risks about $20 or less.
