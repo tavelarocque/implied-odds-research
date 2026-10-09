@@ -341,8 +341,11 @@ same-day Kalshi range against the rule (3 cents past the touch, at least 100 con
 per day, Kalshi's fee per 100-lot) and writes its decisions to `data/raw/paper/` on the data branch. Git timestamps
 every decision when it is made, so the log cannot use later information, and each trade records the money it ties up
 until settlement. It imports layer 5's constants and helpers, and `replay --check` confirms it fires exactly the
-trades layer 5's backtest does (41 of 41 on the first five days). Profit is sealed like layer 5: `report` refuses to
-run before 2026-11-30.
+trades layer 5's backtest does (41 of 41 on the first five days). Each run also records Kalshi's result for every
+unsettled trade (`data/raw/paper_results/`), and `digest` lists the latest trades and whether each won. Outcomes are
+watched trade by trade from 2026-10-09; the rule stays frozen, and the pooled verdict (`report`, layer 5 rule 3) still
+waits for 2026-11-30. `live --btc` runs the same rule on Bitcoin (`research/PREREGISTRATION_BTC.md`) after every crypto
+snapshot, logging to `data/raw/paper_btc/`; `digest` shows both.
 
 Replay of the first five days (decisions only): 18 S&P and 23 Nasdaq trades. Capital tied up per day was a median of
 about $200 per index: a 100-lot at these prices risks about $20 or less.
