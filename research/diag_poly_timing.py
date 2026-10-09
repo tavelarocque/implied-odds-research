@@ -53,8 +53,9 @@ for e in pm.itertuples():
             if c is not None:
                 i = np.searchsorted(c[0], target, side="right") - 1
                 blk = c[1][i]["yes_bid"] if i >= 0 else c[1][0]["yes_bid"]
-                raw = blk.get("close" if i >= 0 else "open")
-                b = float(raw) if raw not in (None, "") else np.nan
+                f = "close" if i >= 0 else "open"           # current API names it close_dollars; archived files close
+                raw = blk.get(f"{f}_dollars", blk.get(f))
+                b = (float(raw) if isinstance(raw, str) else float(raw) / 100) if raw not in (None, "") else np.nan
             q.append({"strike_type": m.strike_type, "floor_strike": m.floor_strike, "cap_strike": m.cap_strike,
                       "bid": 0.0 if b != b else b, "ask": np.nan})
         return prob_above(make_ladder(q), d.K, "bid")
