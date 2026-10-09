@@ -32,6 +32,11 @@ jobs:
           cd collect
           python deribit_snapshot.py
           python kalshi_snapshot.py
+      - name: Paper trade Bitcoin (layer 5 rule, decisions only)
+        continue-on-error: true
+        run: |
+          pip install --quiet numpy pandas scipy
+          python trade/paper.py live --btc
       - name: Save to the data branch
         run: |
           git config user.name "implied-odds-collector"
