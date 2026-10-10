@@ -206,6 +206,17 @@ The Nasdaq long-shot bucket is what a 58-way search of a fair market finds about
 t-statistic says otherwise (p 0.003), but it estimates noise from data with one loss in 473 trades, the same
 failure that collapsed the holdout bootstrap; the script prints both so the difference is visible.
 
+## Diagnostic: exact no-arbitrage check on the live smile fits
+
+`Surface.arb_check()` (implied/bl.py) evaluates Gatheral & Jacquier's exact condition (Durrleman's g(k) >= 0 means a
+non-negative density) over +/- 8 standard deviations; `tests/test_svi_arb.py` checks it flags the paper's own
+counter-example and proves numerically that `at_time` (moving a smile to an earlier time) cannot create butterfly
+arbitrage. `research/check_svi_arb.py` ran it on every local snapshot (51 S&P, 51 Nasdaq and 3 Deribit fits, early
+October): Nasdaq and Deribit never violate it; 5 S&P fits (10%) have g slightly below zero, 3 of them inside the quoted
+range, all tiny (worst -0.003) and all on the last snapshots before the close, the shortest expiry, where the paper also
+reports its fits break down. Layer 5's coarser mass check passes all of them, which is fine at that size; decisions
+still use the pre-registered checks, and this is logged as a diagnostic only.
+
 ## The ledger: every claim, adjusted for how many things were tried
 
 `research/ledger_claims.csv` lists every inferential claim the project had made by 2026-10-09 (46 rows), committed

@@ -137,6 +137,18 @@ class Surface:
         return {"mass": float(q.sum() * dK), "mean": float((K * q).sum() * dK / max(q.sum() * dK, 1e-12)),
                 "forward": self.F, "min_density": float(q.min()), "negative_mass": float(-q[q < 0].sum() * dK)}
 
+    def arb_check(self, width=8.0, n=2001):
+        """Diagnostic only (decisions still use checks()): Gatheral & Jacquier's exact no-butterfly condition. The density
+        is non-negative wherever Durrleman's g(k) >= 0, so report min g over +/- width standard deviations and inside
+        the quoted range, the share of that grid where g < 0, and Lee's wing slope b(1+|rho|) (must be <= 2)."""
+        a, b, rho, m, s = self.params
+        sd = math.sqrt(max(svi_total_variance(0.0, *self.params), 1e-12))
+        k = np.linspace(-width * sd, width * sd, n)
+        g = svi_durrleman_g(k, *self.params)
+        inside = (k >= self.k_min) & (k <= self.k_max)
+        return {"min_g": float(g.min()), "min_g_quoted": float(g[inside].min()) if inside.any() else float("nan"),
+                "share_g_negative": float((g < 0).mean()), "lee_slope": float(b * (1 + abs(rho)))}
+
     def in_fitted_range(self, K):
         return self.k_min <= math.log(K / self.F) <= self.k_max
 
