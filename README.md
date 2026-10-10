@@ -376,6 +376,15 @@ headline CPI). Verdict: no edge from the public nowcast; not pursued. One caveat
 spread for the nowcast is cruder than Kalshi's own distribution, which hurts its Brier score; a better-calibrated
 nowcast distribution could narrow the gap, but not reverse which side the big disagreements resolve toward.
 
+**Why Kalshi wins: information, not the nowcast's miscalibration** (`research/explore_cpi_corp.py`, added
+2026-10-09). The CORP decomposition (Dimitriadis, Gneiting & Jordan 2021) splits each score into miscalibration (MCB,
+what isotonic recalibration would fix) and discrimination (DSC, information content). Both CPI series, 252 contracts in
+73 releases: Kalshi's Brier advantage of -0.043 (-0.066 to -0.018, release resamples) is mostly discrimination, +0.035
+(+0.011 to +0.057), not the nowcast being miscalibrated, -0.007 (-0.023 to +0.004). The log score agrees (DSC +0.086,
++0.025 to +0.148). Diebold-Mariano on per-release mean losses (Newey-West) is weaker, t = -1.84 (equal weight per
+release), and the gap grows with the size of the disagreement: Kalshi's edge is concentrated where the two differ most.
+Core CPI alone: Brier gap -0.037 (-0.066 to -0.005), split not significant either way.
+
 ## Exploratory: public attention vs S&P volatility. Mostly the VIX's horizon
 
 `research/explore_attention_vol.py` and `explore_attention_vol_robust.py` (2015-08 to 2026-03, 2,676 sessions): after
