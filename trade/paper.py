@@ -228,6 +228,7 @@ def live_btc():
     try:
         live_l11(krows, kpath, now)
         settle(log="paper_l11", res="paper_l11_results")
+        settle_maker()
     except Exception as e:                                  # never let layer 11 break the layer 5 paper trader
         print(f"paper l11: failed ({e})")
 
@@ -292,16 +293,97 @@ def live_l11(krows, kpath, now):
                                  "strike": float(m["floor_strike"]), "bid": bid, "ask": ask, "bid_size": bsz,
                                  "ask_size": asz, "hours_to_close": h, "side": "buy", "price": float(ask)}))
     run["new_trades"] = len(trades)
+    # Shadow maker version (logged only, never traded; Burgi, Deng & Whelan 2026: makers do far better than takers):
+    # instead of buying YES at the ask, rest a bid at the current YES bid, 100 contracts, until settlement. Filled
+    # only if later trades show it would have been (checked after settlement by settle_maker). Kalshi's fee schedule
+    # (effective 2026-07-07) charges makers only on listed series; KXBTCD is not listed, so the maker fee is 0.
+    makers = [{"type": "maker", "series": "KXBTCD", "rule": "layer11-maker-shadow", "day": day, "snap": run["snap"],
+               "placed_utc": krows[0]["collected_utc"], "event": t["event"], "ticker": t["ticker"],
+               "strike": t["strike"], "price": t["bid"], "ask": t["ask"], "bid_size_ahead": t["bid_size"],
+               "qty": QTY, "fee": 0.0, "hours_to_close": h} for t in trades]
     d = os.path.join(RAW, "paper_l11", day)
     os.makedirs(d, exist_ok=True)
     out = os.path.join(d, f"paper_l11_{os.path.basename(kpath).split('_')[-1]}")
     with gzip.open(out, "wt") as f:
-        for r in [run] + trades:
+        for r in [run] + trades + makers:
             f.write(json.dumps(r) + "\n")
     print(f"paper l11: F&G {fg}, funding {funding}; signal {'YES' if signal else 'no'}; {len(trades)} trades "
           f"-> {os.path.relpath(out, ROOT)}")
     for x in trades:
         print(f"  buy {x['qty']} YES {x['ticker']} at {100 * x['price']:.0f}c, ties up ${x['capital']:.2f}")
+
+
+def settle_maker():
+    """For each shadow maker bid whose market has settled: the result, and whether it would have filled. A trade
+    printed below the bid means the price went through it (filled for sure, 'through'); a trade at the bid means it may
+    have filled, depending on queue position ('touch'). Writes data/raw/paper_l11_maker/<day>.json."""
+    sys.path.insert(0, os.path.join(ROOT, "collect"))
+    from common import get_json
+    BASE = "https://api.elections.kalshi.com/trade-api/v2"
+    names = subprocess.run(["git", "ls-tree", "-r", "--name-only", "origin/data", "data/raw/paper_l11/",
+                            "data/raw/paper_l11_maker/"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
+    done, rows = {}, {}
+    for n in names:
+        if n.startswith("data/raw/paper_l11_maker/"):
+            done[os.path.basename(n)[:10]] = json.loads(subprocess.run(["git", "show", f"origin/data:{n}"], cwd=ROOT,
+                                                                       capture_output=True, check=True).stdout)
+        else:
+            for r in L5.load(n):
+                if r.get("type") == "maker":
+                    rows.setdefault(r["day"], []).append(r)
+    for day, ms in rows.items():
+        got, new = dict(done.get(day, {})), 0
+        for m in ms:
+            if m["ticker"] in got:
+                continue
+            mk = get_json(f"{BASE}/markets/{m['ticker']}").get("market", {})
+            if mk.get("result") not in ("yes", "no"):
+                continue
+            lo, cursor, t0 = None, None, int(pd.Timestamp(m["placed_utc"]).timestamp())
+            t1 = int(pd.Timestamp(mk["close_time"]).timestamp())
+            while True:
+                q = f"{BASE}/markets/trades?ticker={m['ticker']}&min_ts={t0}&max_ts={t1}&limit=1000" + (f"&cursor={cursor}" if cursor else "")
+                page = get_json(q)
+                for tr in page.get("trades", []):
+                    p = tr.get("yes_price_dollars", tr.get("yes_price"))
+                    p = float(p) if isinstance(p, str) else (p / 100 if p is not None else None)
+                    if p is not None:
+                        lo = p if lo is None else min(lo, p)
+                cursor = page.get("cursor")
+                if not cursor:
+                    break
+            got[m["ticker"]] = {"result": mk["result"], "min_trade": lo,
+                                "fill_through": lo is not None and lo < m["price"] - 1e-9,
+                                "fill_touch": lo is not None and lo <= m["price"] + 1e-9}
+            new += 1
+        if new:
+            d = os.path.join(RAW, "paper_l11_maker")
+            os.makedirs(d, exist_ok=True)
+            json.dump(got, open(os.path.join(d, f"{day}.json"), "w"), indent=0, sort_keys=True)
+            print(f"paper l11 maker: settled {new} shadow bids from {day}")
+
+
+def maker_summary():
+    """Digest lines for the shadow maker log: fills and what they would have earned (fee 0 on KXBTCD)."""
+    names = subprocess.run(["git", "ls-tree", "-r", "--name-only", "origin/data", "data/raw/paper_l11/",
+                            "data/raw/paper_l11_maker/"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
+    res, rows = {}, []
+    for n in names:
+        if n.startswith("data/raw/paper_l11_maker/"):
+            res.update(json.loads(subprocess.run(["git", "show", f"origin/data:{n}"], cwd=ROOT, capture_output=True,
+                                                 check=True).stdout))
+        else:
+            rows += [r for r in L5.load(n) if r.get("type") == "maker"]
+    if not rows:
+        return ["  shadow maker (limit-order) version: no bids yet"]
+    settled = [(r, res[r["ticker"]]) for r in rows if r["ticker"] in res]
+    out = [f"  shadow maker version: {len(rows)} bids logged, {len(settled)} settled"]
+    for kind in ("fill_through", "fill_touch"):
+        f = [(r, s) for r, s in settled if s[kind]]
+        pnl = sum(r["qty"] * ((1.0 if s["result"] == "yes" else 0.0) - r["price"]) for r, s in f)
+        out.append(f"    if filled only when traded {'through' if kind == 'fill_through' else 'at or through'} the bid: "
+                   f"{len(f)} fills, {sum(s['result'] == 'no' for _, s in f)} lost, net ${pnl:+.2f}")
+    return out
 
 
 def l11_runs():
@@ -390,6 +472,10 @@ def digest(days_back=1):
             why = f"(options said {100 * t['p_opt']:.1f}c)" if "p_opt" in t else "(selling the long shot)"
             print(f"  {when} PT  {name:<10} {what} x{t['qty']} on {rng_} at {100 * t['price']:.0f}c {why} -> {out}")
         if log == "paper_l11":
+            try:
+                print("\n".join(maker_summary()))
+            except Exception as e:
+                print(f"  shadow maker summary unavailable ({e})")
             for run in l11_runs():
                 if pd.Timestamp(run["snap"]) >= since:
                     print(f"  {run['day']}: Fear & Greed {run['fear_greed']}, funding {run['funding']}; "
