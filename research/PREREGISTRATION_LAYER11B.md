@@ -53,3 +53,13 @@ and within 30 minutes of it, as layer 11. The model fitted on bars up to 2025-12
   bars mostly tracks volatility; the S&P version added nothing beyond the VIX and the 50-day trend.
 - The prediction, written so it can be wrong: verdict "inconclusive" or "edge", mean profit positive.
 Nothing in the rule changes after the results are seen.
+
+## Amendment, 2026-10-09 (before test A was run; no holdout result had been computed or seen)
+
+A data-selection flaw was found while reading Kapoor & Narayanan (2022) on leakage: `collect/kalshi_btc_daily.py`
+downloaded candles only for strikes within 4% of the *settled* price, which uses the outcome to choose the sample. If
+Bitcoin fell more than about 4% in the last hours, the downside long shots that then paid out were never downloaded,
+so the test could not see those losses (development sample: at most 3 such contracts at 3 hours, none at 1 hour;
+`research/check_strike_selection.py`). Fix, decided before any holdout outcome was looked at: `collect/kalshi_btc_fill.py`
+adds candles for every strike within 6% below the Bitcoin price 1 or 3 hours before settlement (Coinbase hourly), a
+selection known at decision time. Test A runs on the combined data. The rule, thresholds and verdict are unchanged.
