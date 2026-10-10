@@ -471,6 +471,18 @@ where selling the downside long shot loses, and absent at 1 hour, where it pays;
 that day's long-shot profit (3h: +0.00). Reading: layer 11's effect is not a re-pricing of the distribution's body;
 it lives in the far tail (contracts at 2 to 8 cents), consistent with crash lottery tickets bought on fear days.
 
+## Exploratory: do Kalshi's hourly Bitcoin quotes lag the spot price? Mostly no
+
+`research/explore_btc_stale.py` (data: `collect/btc_stale_data.py`, `collect/run_stale.sh`), development sample: 374
+random hourly KXBTCD sets before 2026-04, Kalshi 1-minute quotes for strikes within 1.5% of the settlement, Coinbase
+1-minute BTC-USD, fair value from spot and a lognormal move with volatility from the 6 hours before the set opened.
+**Benchmark check first:** 30 minutes out, Kalshi's mid beats the spot model (Brier 0.125 vs 0.129), so most gaps
+between them are the model's error, not stale quotes. The gap averages 4.5 to 5.5 cents and grows toward the hour.
+Trading toward the model at the touch after fees: 5 cents past it, -1.3 cents per contract (-3.7 to +0.9, 1,606
+trades); 10 cents, -0.2 (-3.1 to +2.9, 724). Only the 20-cent threshold is positive, +10.1 cents (-0.7 to +19.5), on 71
+trades in 40 sets, a median 20 minutes before the hour: possibly genuinely stale quotes after fast moves, but too few
+to tell and one of three thresholds. Not pursued unless a finer test (seconds, not minutes) is worth building.
+
 ## Paper trading the layer 5 rule
 
 `trade/paper.py` runs layer 5's trading rule live: after every collection run it fits the options, checks each
