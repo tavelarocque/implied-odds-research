@@ -386,6 +386,49 @@ def maker_summary():
     return out
 
 
+def drift_monitor(alpha=0.2, gamma=0.05, window=20):
+    """Drift alarm for the options model behind layer 5's paper trades (stocks and Bitcoin), in settlement order.
+
+    1. Adaptive conformal inference (Gibbs & Candes 2021): score s = |y - p_opt|; the model 'covers' a trade if s is
+       within the (1 - alpha_t) quantile of earlier scores; alpha_{t+1} = alpha_t + gamma (alpha - err_t). If recent
+       misses run well above alpha, the model's errors have grown: the alarm. gamma is 0.05 rather than the paper's
+       0.005 because trades arrive by the dozen, not the thousand.
+    2. On the same settled trades: Brier score of the options probability vs Kalshi's mid. Layer 5 trades only where
+       the two disagree by 3+ cents, so this is the live answer to "who was right when they disagreed".
+    Monitoring only: changes no trade and no pre-registered analysis."""
+    rows = []
+    for log, res in (("paper", "paper_results"), ("paper_btc", "paper_btc_results")):
+        trades, results = all_trades(log, res)
+        for day, ts_ in trades.items():
+            for t in ts_:
+                r = results.get(day, {}).get(t["ticker"])
+                if r not in ("yes", "no"):
+                    continue
+                settle_t = pd.Timestamp(t["snap"]) + pd.Timedelta(hours=float(t.get("hours_to_close", 0)))
+                rows.append((settle_t, float(t["p_opt"]), (t["bid"] + t["ask"]) / 2, 1.0 if r == "yes" else 0.0))
+    if len(rows) < 5:
+        return [f"  drift alarm: {len(rows)} settled trades so far; starts at 5"]
+    rows.sort(key=lambda r: r[0])
+    p, mid, y = (np.array([r[i] for r in rows]) for i in (1, 2, 3))
+    s = np.abs(y - p)
+    a, errs = alpha, []
+    for i in range(len(s)):
+        prev = s[:i]
+        q = np.inf if (a <= 0 or len(prev) == 0) else (-np.inf if a >= 1 else np.quantile(prev, 1 - a))
+        e = float(s[i] > q); errs.append(e)
+        a += gamma * (alpha - e)
+    recent = np.array(errs[-window:])
+    band = alpha + 2 * np.sqrt(alpha * (1 - alpha) / len(recent))
+    alarm = len(recent) >= 10 and recent.mean() > band
+    b_opt, b_mid = ((p - y) ** 2).mean(), ((mid - y) ** 2).mean()
+    note = "; too few trades to judge before ~30" if len(rows) < 30 else ""
+    return [f"  drift alarm ({len(rows)} settled layer 5 trades, stocks + Bitcoin): recent misses "
+            f"{recent.mean():.0%} of the last {len(recent)} vs target {alpha:.0%} (alarm above {band:.0%}) -> "
+            f"{'ALARM: the options model is missing more than it should' if alarm else 'ok'}",
+            f"  who was right when they disagreed: Brier options {b_opt:.3f} vs Kalshi mid {b_mid:.3f} "
+            f"({'options better' if b_opt < b_mid else 'Kalshi better'}; lower is better{note})"]
+
+
 def l11_runs():
     names = subprocess.run(["git", "ls-tree", "-r", "--name-only", "origin/data", "data/raw/paper_l11/"],
                            cwd=ROOT, capture_output=True, text=True, check=True).stdout.split()
@@ -484,6 +527,11 @@ def digest(days_back=1):
             print("  no trades in this period")
         print(f"  Since live start: {sum(len(v) for v in trades.values())} trades, {n_set} settled, {wins} won, "
               f"{n_set - wins} lost, net ${total:+.2f} after fees")
+    print("Model health:")
+    try:
+        print("\n".join(drift_monitor()))
+    except Exception as e:
+        print(f"  drift alarm unavailable ({e})")
 
 
 def replay(check=False):

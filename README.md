@@ -559,7 +559,12 @@ the ask, because on Kalshi makers lose far less than takers (Burgi, Deng & Whela
 trade prints decide whether it would have filled: for sure if a trade printed below the bid, possibly if one printed at
 it (queue position unknown). KXBTCD is not on Kalshi's list of series charging maker fees (schedule effective
 2026-07-07), so the shadow fee is 0. The digest reports fills and their profit under both fill assumptions; resting
-bids fill more often when the price falls, so the shadow log also measures that adverse selection.
+bids fill more often when the price falls, so the shadow log also measures that adverse selection. The digest
+ends with a model-health check on layer 5's settled paper trades (stocks and Bitcoin, in settlement order): an
+adaptive conformal alarm (Gibbs & Candes 2021) that fires if the options model's recent misses run well above their
+target rate, and the running Brier score of the options probability vs Kalshi's mid on the trades, i.e. who was right
+when the two disagreed by 3+ cents. Monitoring only; first reading (11 settled trades): no alarm, Brier 0.041 options
+vs 0.039 Kalshi, far too few to judge.
 
 Replay of the first five days (decisions only): 18 S&P and 23 Nasdaq trades. Capital tied up per day was a median of
 about $200 per index: a 100-lot at these prices risks about $20 or less.
