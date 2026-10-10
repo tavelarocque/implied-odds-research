@@ -6,6 +6,9 @@
 export PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
 cd "$HOME/CODE/implied-odds" || exit 1
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
+# A missed slot fires once when the Mac wakes, before Wi-Fi is back (2026-10-09 09:04 failed this way), so wait
+# up to 3 minutes for GitHub to be reachable before trying.
+for i in $(seq 1 18); do curl -s -m 5 -o /dev/null https://api.github.com && break; sleep 10; done
 last=$(gh run list -w snapshot.yml -L 1 --json createdAt -q '.[0].createdAt' 2>/dev/null)
 if [ -n "$last" ]; then
   age=$(( $(date -u +%s) - $(date -j -u -f '%Y-%m-%dT%H:%M:%SZ' "$last" +%s) ))
