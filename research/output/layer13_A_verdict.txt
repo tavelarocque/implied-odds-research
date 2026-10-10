@@ -1,0 +1,19 @@
+Layer 13, test A: 5pm Bitcoin sets settling 2026-04-01 to 2026-09-30
+4092 quoted contract-horizons on 183 days; 0 strikes in the band had no candles
+
+1h before settlement: 1426 contracts on 183 days
+  PRIMARY  Brier combination - Kalshi -0.00093 (97.5%: -0.00188 to +0.00012) -> no difference shown
+  SECONDARY  Brier lognormal alone - Kalshi +0.00246 (95%: +0.00071 to +0.00409)
+  combo     Brier 0.0528 = miscalibration 0.0032 - discrimination 0.1985 + uncertainty 0.2482
+  mid       Brier 0.0537 = miscalibration 0.0035 - discrimination 0.1979 + uncertainty 0.2482
+  lognormal Brier 0.0562 = miscalibration 0.0054 - discrimination 0.1974 + uncertainty 0.2482
+  DESCRIPTION  trading toward the combination at the touch (edge > 3c after fee): 91 trades on 51 days, +0.76c per contract (-7.08 to +7.80)
+
+3h before settlement: 2666 contracts on 183 days
+  PRIMARY  Brier combination - Kalshi -0.00169 (97.5%: -0.00268 to -0.00047) -> combination beats Kalshi
+  SECONDARY  Brier lognormal alone - Kalshi +0.00131 (95%: -0.00021 to +0.00309)
+  combo     Brier 0.0489 = miscalibration 0.0019 - discrimination 0.2025 + uncertainty 0.2495
+  mid       Brier 0.0506 = miscalibration 0.0038 - discrimination 0.2028 + uncertainty 0.2495
+  lognormal Brier 0.0519 = miscalibration 0.0038 - discrimination 0.2014 + uncertainty 0.2495
+  DESCRIPTION  trading toward the combination at the touch (edge > 3c after fee): 414 trades on 126 days, +5.69c per contract (+1.99 to +9.25)
+

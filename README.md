@@ -633,6 +633,33 @@ Kronos was published and before the holdout, 210 days (2025-10-25 left out: Coin
   trades) and the primary statistic tested once on sets settling 2026-10-15 to 2027-01-31. Kronos as a forecaster on
   its own is dropped: a free lognormal model does as well as Kalshi and Kronos does worse.
 
+## Layer 13, pre-registered: de-compressing Kalshi's Bitcoin prices with a plain lognormal model. PASSES on the holdout at 3 hours
+
+`research/PREREGISTRATION_LAYER13.md` (committed before the holdout was read for this), `research/test_layer13_lognormal.py`.
+The forecast: logit P = b x logit(Kalshi mid) + c x logit(lognormal), where the lognormal uses the Coinbase price and
+the last 24 hours' volatility, no drift; b and c were fitted on layer 12's development window and frozen (1 hour:
+0.794 and 0.414; 3 hours: 0.846 and 0.432), no intercept. b + c is about 1.2 to 1.3: the blend mainly pushes Kalshi's
+prices away from 50%, which is where layer 11 found them too compressed.
+
+**Test A, the holdout (5pm sets settling 2026-04-01 to 2026-09-30, run once on 2026-10-10), 183 days:**
+
+- **3 hours out: the blend beats Kalshi.** Brier 0.0489 vs 0.0506, difference **-0.0017** (97.5%: -0.0027 to
+  -0.0005), 2,666 contracts. Survives the ledger's BHY correction (0.034), not the doubled-tests version (0.20).
+- 1 hour out: no difference shown, -0.0009 (-0.0019 to +0.0001), 1,426 contracts.
+- The pre-registered prediction (a small win at 3 hours, under 0.003, nothing at 1 hour) was right.
+- **Where the gain comes from:** calibration, not discrimination. Miscalibration halves at 3 hours (0.0038 to 0.0019)
+  while discrimination is level (0.2025 vs 0.2028). The lognormal on its own is *worse* than Kalshi on the holdout
+  (+0.0025 at 1 hour, +0.0013 at 3), so this is not "a simple model beats the market": Kalshi's price ranks outcomes
+  well and sits too close to 50%, and the blend fixes the second part.
+- **Trading, description only:** buying at the touch whenever the blend disagrees by more than 3 cents after the fee,
+  3 hours out: 414 trades on 126 days, **+5.7 cents per contract (+2.0 to +9.3)**; 1 hour out: 91 trades, +0.8 (-7.1 to
+  +7.8). At 3 hours both sides pay about the same (YES 184 trades +5.5c, NO 230 trades +5.9c), win about 91%, median
+  price paid 86 cents: it is buying the favourite in both directions, the mirror image of layer 11's selling long
+  shots. Five of six months positive (June flat); the best five days are 24% of the total. Caveats: quotes are hourly
+  candle closes, not fills, and depth at the touch is unknown; this overlaps layer 11's long-shot trade. Per the
+  pre-registration it sizes whether a trading rule is worth its own pre-registration (it is), it is not a result.
+- **Test B (forward, sets settling 2026-10-15 to 2027-01-31)** runs once on or after 2027-02-01.
+
 ## Paper trading the layer 5 rule
 
 `trade/paper.py` runs layer 5's trading rule live: after every collection run it fits the options, checks each

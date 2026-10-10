@@ -55,3 +55,5 @@ K12a,12,Kronos-small vs Kalshi mid Brier 1h (Kalshi better; pre-registered),p,0.
 K12b,12,Kronos-small vs Kalshi mid Brier 3h (pre-registered),p,0.0057,-0.0023,0.0138,0,0.108,day bootstrap; 97.5% interval
 K12c,12,Kronos adds information beyond Kalshi's price 1h (pre-registered secondary),p,0.145,-0.048,0.365,0,0.138,logit coefficient; day bootstrap
 K12d,12,Kronos adds information beyond Kalshi's price 3h (pre-registered secondary),p,0.229,0.054,0.412,0,0.014,logit coefficient; day bootstrap
+L13a,13,Lognormal blend beats Kalshi mid Brier 1h on the holdout (pre-registered test A),p,-0.00093,-0.00188,0.00012,0,0.0580,day bootstrap; 97.5% interval
+L13b,13,Lognormal blend beats Kalshi mid Brier 3h on the holdout (pre-registered test A),p,-0.00169,-0.00268,-0.00047,0,0.0020,day bootstrap; 97.5% interval
