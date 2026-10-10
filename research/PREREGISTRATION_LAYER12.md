@@ -95,3 +95,15 @@ API, not only the project's copy), so Kronos has no input ending at either quote
 horizon whose last pre-quote Coinbase candle is missing is left out of every comparison, Kalshi's and the lognormal
 benchmark's included. In this window that is 2025-10-25 only (both horizons): 211 settlement days remain. The path
 sampler stopped at this day; it resumes from the 51 days already cached, which are unchanged.
+
+## Amendment 3, 2026-10-10 (after the development result; before any forward data exists)
+
+The development result triggered the forward test ("Afterwards" above: secondary 1 was positive at 3 hours). Instead
+of logging Kronos live, its probabilities for the forward window (sets settling 2026-10-15 to 2027-01-31) are computed
+once after the window closes, with this file's code and the same frozen weights: Hugging Face revisions
+`NeoQuasar/Kronos-small@901c26c1332695a2a8f243eb2f37243a37bea320` and
+`NeoQuasar/Kronos-Tokenizer-base@0e0117387f39004a9016484a186a908917e22426`, Kronos code at commit `67b630e`. Kronos
+only ever sees the 512 Coinbase candles before each quote, so running it later uses exactly the information it would
+have had live, and it keeps torch out of the cloud collection jobs. Kalshi's quotes come from its historical candles,
+as on the development sample. Analysed once, on or after 2027-02-01, with the primary statistic of this file:
+`LAYER12_WINDOW=B python research/test_layer12_kronos.py paths`, then `... score`.

@@ -17,10 +17,16 @@ from explore_cpi_corp import corp, brier
 
 KH = os.path.join(ROOT, "data", "history", "kalshi")
 OUT = os.path.join(ROOT, "research", "output")
-CACHE = os.path.join(OUT, "layer12_kronos_paths.npz")
-START, END = "2025-09-01", "2026-03-31"
+FORWARD = os.environ.get("LAYER12_WINDOW") == "B"      # amendment 3: the forward window, run once after it closes
+CACHE = os.path.join(OUT, "layer12_kronos_paths_B.npz" if FORWARD else "layer12_kronos_paths.npz")
+START, END = ("2026-10-15", "2027-01-31") if FORWARD else ("2025-09-01", "2026-03-31")
+if FORWARD:
+    from datetime import date
+    assert date.today().isoformat() >= "2027-02-01", "the forward window is analysed on or after 2027-02-01"
+REVISIONS = {"NeoQuasar/Kronos-small": "901c26c1332695a2a8f243eb2f37243a37bea320",
+             "NeoQuasar/Kronos-Tokenizer-base": "0e0117387f39004a9016484a186a908917e22426"}
 HORIZONS, N_PATHS, CONTEXT, BAND = (1, 3), 200, 512, 0.06
-assert END < FINAL_TEST_START
+assert FORWARD or END < FINAL_TEST_START
 logit = lambda p: np.log(p / (1 - p))
 
 
@@ -63,8 +69,8 @@ def sample_paths():
     import torch
     sys.path.insert(0, os.path.expanduser(os.environ.get("KRONOS_DIR", "~/CODE/Kronos")))
     from model import Kronos, KronosTokenizer, KronosPredictor
-    tok = KronosTokenizer.from_pretrained("NeoQuasar/Kronos-Tokenizer-base")
-    mdl = Kronos.from_pretrained("NeoQuasar/Kronos-small")
+    tok = KronosTokenizer.from_pretrained("NeoQuasar/Kronos-Tokenizer-base", revision=REVISIONS["NeoQuasar/Kronos-Tokenizer-base"])
+    mdl = Kronos.from_pretrained("NeoQuasar/Kronos-small", revision=REVISIONS["NeoQuasar/Kronos-small"])
     # Amendment 1 (pre-registration): Apple GPU ("mps"), 200 paths drawn as 8 batches of 25. CPU took about 0.25 s
     # per path, roughly 12 hours for the whole window; 200 at once runs out of GPU memory and 50
     # stalls 3 hours out on this 8 GB Mac.
@@ -151,7 +157,7 @@ def score():
     cb, mk = coinbase(), markets()
     paths = dict(np.load(CACHE))
     q = quotes(cb, mk, paths)
-    q.to_csv(os.path.join(OUT, "layer12_kronos.csv.gz"), index=False)
+    q.to_csv(os.path.join(OUT, "layer12_kronos_B.csv.gz" if FORWARD else "layer12_kronos.csv.gz"), index=False)
     miss = (~q.in_file).sum()
     q = q.dropna(subset=["mid"])
     print(f"Layer 12, Kronos-small vs Kalshi, 5pm Bitcoin sets settling {START} to {END}")
@@ -188,7 +194,7 @@ def score():
         print(f"  Kronos 1-sd of the final price {100 * np.sqrt((dd.kr_sd ** 2).mean()):.2f}% (root-mean-square over days) "
               f"vs realized move sd {100 * np.nanstd(real):.2f}%\n")
     pd.DataFrame(out, columns=["test", "h", "est", "lo", "hi", "p", "verdict"]).to_csv(
-        os.path.join(OUT, "layer12_kronos_verdict.csv"), index=False)
+        os.path.join(OUT, "layer12_kronos_B_verdict.csv" if FORWARD else "layer12_kronos_verdict.csv"), index=False)
 
 
 if __name__ == "__main__":
