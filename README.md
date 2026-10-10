@@ -659,6 +659,10 @@ prices away from 50%, which is where layer 11 found them too compressed.
   candle closes, not fills, and depth at the touch is unknown; this overlaps layer 11's long-shot trade. Per the
   pre-registration it sizes whether a trading rule is worth its own pre-registration (it is), it is not a result.
 - **Test B (forward, sets settling 2026-10-15 to 2027-01-31)** runs once on or after 2027-02-01.
+- **Layer 13b, live paper trading (`research/PREREGISTRATION_LAYER13B.md`, `live_l13` in `trade/paper.py`):** the
+  same rule on the live order book at the crypto snapshot 2.5 to 3.5 hours before each 5pm set, 100 contracts per
+  trade, from 2026-10-10. Every trade and its result is in the morning digest; verdict once on or after 2027-02-01
+  (edge only if the day-bootstrap interval of profit per contract is above 0, with 40+ trades on 20+ days).
 
 ## Paper trading the layer 5 rule
 

@@ -15,7 +15,8 @@ Run from the project root:
     python3 trade/paper.py live            evaluate this run's snapshot (the GitHub workflow calls this)
     python3 trade/paper.py live --btc      the same for Bitcoin (research/PREREGISTRATION_BTC.md; crypto workflow), then
                                            layer 11's rule (research/PREREGISTRATION_LAYER11.md, test B) when the
-                                           snapshot is 2.5-3.5 h before the 5pm ET set settles
+                                           snapshot is 2.5-3.5 h before the 5pm ET set settles, and layer 13b's
+                                           (research/PREREGISTRATION_LAYER13B.md) at the same snapshot
     python3 trade/paper.py replay          rerun the rule over the window so far from the data branch, decisions only
     python3 trade/paper.py replay --check  also confirm the replay matches layer 5's own trade logic exactly
     python3 trade/paper.py digest [N]      the last N stock trading days' trades and the last N x 24 h of Bitcoin
@@ -231,6 +232,11 @@ def live_btc():
         settle_maker()
     except Exception as e:                                  # never let layer 11 break the layer 5 paper trader
         print(f"paper l11: failed ({e})")
+    try:
+        live_l13(krows, kpath, now)
+        settle(log="paper_l13", res="paper_l13_results")
+    except Exception as e:                                  # never let layer 13b break the others
+        print(f"paper l13: failed ({e})")
 
 
 L11_FG, L11_FUNDING, L11_H, L11_TOL_H = 25, 0.0000149, 3.0, 0.5
@@ -311,6 +317,93 @@ def live_l11(krows, kpath, now):
           f"-> {os.path.relpath(out, ROOT)}")
     for x in trades:
         print(f"  buy {x['qty']} YES {x['ticker']} at {100 * x['price']:.0f}c, ties up ${x['capital']:.2f}")
+
+
+# Layer 13b (research/PREREGISTRATION_LAYER13B.md): the layer 13 blend as a live paper trading rule, 3 hours out.
+L13_B, L13_C, L13_MARGIN = 0.846, 0.432, 0.03
+
+
+def l13_lognormal(close):
+    """Coinbase BTC-USD: close of the last completed hour, and the lognormal probability machinery's inputs
+    (sigma of the 23 hourly log returns in the last 24 completed hourly candles, and the hours from that close to
+    settlement). Returns None if Coinbase does not give 24 consecutive completed hours ending at the last full hour."""
+    sys.path.insert(0, os.path.join(ROOT, "collect"))
+    from common import get_json
+    now = pd.Timestamp.now(tz="UTC")
+    last_end = now.floor("h")
+    start = last_end - pd.Timedelta(hours=26)
+    rows = get_json("https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=3600"
+                    f"&start={start.isoformat()}&end={last_end.isoformat()}", retries=2)
+    c = pd.DataFrame(rows, columns=["t", "low", "high", "open", "close", "vol"]).sort_values("t")
+    c = c[c.t + 3600 <= last_end.timestamp()].drop_duplicates("t").tail(24)
+    if len(c) < 24 or c.t.iloc[-1] + 3600 != last_end.timestamp() or (np.diff(c.t.values) != 3600).any():
+        return None
+    sigma1 = float(np.diff(np.log(c.close.values)).std(ddof=1))
+    tau = (close - last_end).total_seconds() / 3600
+    return float(c.close.iloc[-1]), sigma1, tau, last_end.isoformat()
+
+
+def live_l13(krows, kpath, now):
+    """Layer 13b live: at the one snapshot 2.5 to 3.5 hours before the 5pm ET Bitcoin set settles, for every strike
+    within 6% of the Coinbase price with yes bid > 0, a live ask and spread <= 10c, form the frozen blend
+    logit P = 0.846 logit(mid) + 0.432 logit(lognormal) and buy YES at the ask if P - ask - fee > 3c, or sell YES at
+    the bid if bid - P - fee > 3c. 100 contracts, held to settlement. One evaluation per set. Logs to
+    data/raw/paper_l13/, results to data/raw/paper_l13_results/."""
+    import math
+    collected = L5.utc(krows[0]["collected_utc"])
+    ms = [m for m in krows if m.get("type") == "market" and m.get("series") == "KXBTCD"
+          and m["event_ticker"].endswith("17") and m.get("strike_type") == "greater"]
+    ms = [m for m in ms if abs((L5.utc(m["close_time"]) - collected).total_seconds() / 3600 - L11_H) <= L11_TOL_H]
+    if not ms:
+        return
+    ms = [m for m in ms if m["event_ticker"] == ms[0]["event_ticker"]]
+    close = L5.utc(ms[0]["close_time"])
+    h = (close - collected).total_seconds() / 3600
+    day = close.strftime("%Y-%m-%d")
+    if any(rows and rows[0].get("evaluated") for _, rows in logged_runs(day, "paper_l13")):
+        print("paper l13: this set was already evaluated"); return
+    run = {"type": "run", "day": day, "event": ms[0]["event_ticker"], "snap": krows[0]["collected_utc"],
+           "decided_utc": now.isoformat(), "hours_to_close": h, "commit": os.environ.get("GITHUB_SHA", "local")}
+    ln = None
+    try:
+        ln = l13_lognormal(pd.Timestamp(close))
+    except Exception as e:
+        run["reason"] = f"Coinbase unreachable ({e})"
+    if ln is None:
+        run.update(evaluated=False, reason=run.get("reason", "Coinbase hourly candles incomplete"))
+    else:
+        spot, sigma1, tau, cb_hour = ln
+        run.update(evaluated=True, spot=spot, sigma_1h=sigma1, tau=tau, coinbase_hour=cb_hour)
+    trades = []
+    lg = lambda p: math.log(min(max(p, .005), .995) / (1 - min(max(p, .005), .995)))
+    for m in (ms if run["evaluated"] else []):
+        k = float(m["floor_strike"])
+        bid, ask, bsz, asz = L5.kalshi_quote(m)
+        if abs(k / spot - 1) > 0.06 or not (bid > 0 and ask is not None and ask < 1 and ask > bid and ask - bid <= 0.10):
+            continue
+        mid = (bid + ask) / 2
+        p_ln = 0.5 * (1 + math.erf(math.log(spot / k) / (sigma1 * math.sqrt(tau) * math.sqrt(2))))
+        p = 1 / (1 + math.exp(-(L13_B * lg(mid) + L13_C * lg(p_ln))))
+        side = ("buy", ask) if p - ask - L5.fee100(ask) > L13_MARGIN else \
+               ("sell", bid) if bid - p - L5.fee100(bid) > L13_MARGIN else None
+        if side is None:
+            continue
+        trades.append(sized({"type": "trade", "series": "KXBTCD", "rule": "layer13b", "day": day, "snap": run["snap"],
+                             "event": m["event_ticker"], "ticker": m["ticker"], "strike": k, "bid": bid, "ask": ask,
+                             "bid_size": bsz, "ask_size": asz, "hours_to_close": h, "p_blend": p, "p_lognormal": p_ln,
+                             "mid": mid, "side": side[0], "price": float(side[1])}))
+    run["new_trades"] = len(trades)
+    d = os.path.join(RAW, "paper_l13", day)
+    os.makedirs(d, exist_ok=True)
+    out = os.path.join(d, f"paper_l13_{os.path.basename(kpath).split('_')[-1]}")
+    with gzip.open(out, "wt") as f:
+        for r in [run] + trades:
+            f.write(json.dumps(r) + "\n")
+    msg = run.get("reason") or "spot {:,.0f}, hourly sigma {:.2f}%".format(run["spot"], 100 * run["sigma_1h"])
+    print(f"paper l13: {msg}; {len(trades)} trades -> {os.path.relpath(out, ROOT)}")
+    for x in trades:
+        print(f"  {'buy' if x['side'] == 'buy' else 'sell'} {x['qty']} YES {x['ticker']} at {100 * x['price']:.0f}c "
+              f"(blend {100 * x['p_blend']:.1f}c, Kalshi mid {100 * x['mid']:.1f}c), ties up ${x['capital']:.2f}")
 
 
 def settle_maker():
@@ -484,7 +577,9 @@ def digest(days_back=1):
     for title, log, res in (("Stocks (S&P 500, Nasdaq-100 daily ranges)", "paper", "paper_results"),
                             ("Bitcoin (Kalshi hourly BTC)", "paper_btc", "paper_btc_results"),
                             ("Bitcoin layer 11 (sell downside long shots on fear days, 3 h before 5pm ET)",
-                             "paper_l11", "paper_l11_results")):
+                             "paper_l11", "paper_l11_results"),
+                            ("Bitcoin layer 13b (trade toward the lognormal blend, 3 h before 5pm ET)",
+                             "paper_l13", "paper_l13_results")):
         trades, results = all_trades(log, res)
         total, n_set, wins, rows = 0.0, 0, 0, []
         for day in sorted(trades):
@@ -509,10 +604,13 @@ def digest(days_back=1):
                         f"above {t['lo']:,.0f}" if t["lo"] else f"below {t['hi']:,.0f}")
             elif log == "paper_btc":
                 name, rng_ = "BTC", f"above ${t['strike']:,.0f} ({t['kind']}, {t['hours_to_close']:.1f} h to settle)"
+            elif log == "paper_l13":
+                name, rng_ = "BTC L13b", f"above ${t['strike']:,.0f} ({t['hours_to_close']:.1f} h to settle)"
             else:
                 name, rng_ = "BTC L11", f"above ${t['strike']:,.0f} ({t['hours_to_close']:.1f} h to settle)"
             out = "open" if r is None else f"{'WON' if pnl > 0 else 'LOST'} ${pnl:+.2f} (settled {r.upper()})"
-            why = f"(options said {100 * t['p_opt']:.1f}c)" if "p_opt" in t else "(selling the long shot)"
+            why = (f"(options said {100 * t['p_opt']:.1f}c)" if "p_opt" in t else
+                   f"(blend said {100 * t['p_blend']:.1f}c)" if "p_blend" in t else "(selling the long shot)")
             print(f"  {when} PT  {name:<10} {what} x{t['qty']} on {rng_} at {100 * t['price']:.0f}c {why} -> {out}")
         if log == "paper_l11":
             try:
