@@ -79,7 +79,11 @@ def sample_paths():
             if key in done:
                 continue
             torch.manual_seed(12); np.random.seed(12)
-            x = context(cb, end - h * 3600)
+            try:
+                x = context(cb, end - h * 3600)
+            except AssertionError:          # amendment 2: Coinbase has no candle for the quote hour; day left out
+                print(f"  {key}: no Coinbase candle before the quote, left out", flush=True)
+                continue
             df = x[["open", "high", "low", "close"]].assign(volume=x.vol).reset_index(drop=True)
             xt = pd.Series(pd.to_datetime(x.index, unit="s"))
             yt = pd.Series(pd.to_datetime([end - (h - i) * 3600 for i in range(h)], unit="s"))
@@ -102,6 +106,8 @@ def quotes(cb, mk, paths):
         cs = json.load(gzip.open(p, "rt")).get("candlesticks", []) if os.path.exists(p) else []
         t = np.array([c["end_period_ts"] for c in cs])
         for h in HORIZONS:
+            if f"{r.day}_{h}" not in paths:          # amendment 2
+                continue
             qt = r.end - h * 3600
             x = cb[cb.index + 3600 <= qt].iloc[-24:]
             spot = float(x.close.iloc[-1])

@@ -87,3 +87,11 @@ settlement day and horizon (200 in one batch runs out of GPU memory; 50 stalled 
 day and horizon; the random draws differ from what CPU would have produced, which changes nothing the tests depend on.
 A timing check on one development day (the first in the window, 1 and 3 hours out) looked only at speed and at the spread of
 the sampled prices, never at the outcome or at Kalshi.
+
+## Amendment 2, 2026-10-09 (during path sampling, before any scoring; no Kalshi price or outcome had been read)
+
+Coinbase published no BTC-USD candles from 16:00 to 20:59 UTC on Saturday 2025-10-25 (checked against Coinbase's own
+API, not only the project's copy), so Kronos has no input ending at either quote time that day. A settlement day and
+horizon whose last pre-quote Coinbase candle is missing is left out of every comparison, Kalshi's and the lognormal
+benchmark's included. In this window that is 2025-10-25 only (both horizons): 211 settlement days remain. The path
+sampler stopped at this day; it resumes from the 51 days already cached, which are unchanged.
