@@ -458,6 +458,19 @@ paid. So the parameters are not fragile, but the evidence that mood rather than 
 **Horizon:** 1 and 3 hours out are positive at every cut-off; 6 hours out loses at almost every cut-off, for both
 layer 11 and 11b. Layer 11b's regime cut-off (0.3 to 0.7) is +1.7 to +2.3 cents at 3 hours, all with p < 0.05.
 
+## Exploratory: does Kalshi's implied Bitcoin distribution tilt with mood? Barely, and not where the money is
+
+`research/explore_skew.py`, development sample. Lee, Lee and Lee (SSRN 6748186) find Kalshi's implied Bitcoin
+distributions symmetric on average; their calibration result ("underconfident") uses lifetime average prices, which
+pull toward 0.5 by construction, so it is not an ex-ante test. Here, from each 5pm set's quoted ladder at 1, 3 and 6
+hours out (monotone fit, Bowley quantile skewness from the 10th/50th/90th percentiles): symmetric on average, confirmed
+(3h: -0.006, -0.012 to +0.001; downside and upside half-widths 1.30% and 1.28%). On fear-or-funding days the shape tilts
+slightly to the downside at 3 hours (-0.014 vs -0.001; difference -0.013, -0.028 to -0.000) and at 6 hours (-0.012,
+-0.023 to -0.002), not at 1 hour. The tilt is tiny (a few hundredths of a percent of price), strongest at 6 hours,
+where selling the downside long shot loses, and absent at 1 hour, where it pays; a day's skewness is uncorrelated with
+that day's long-shot profit (3h: +0.00). Reading: layer 11's effect is not a re-pricing of the distribution's body;
+it lives in the far tail (contracts at 2 to 8 cents), consistent with crash lottery tickets bought on fear days.
+
 ## Paper trading the layer 5 rule
 
 `trade/paper.py` runs layer 5's trading rule live: after every collection run it fits the options, checks each
