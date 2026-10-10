@@ -542,7 +542,13 @@ snapshot, logging to `data/raw/paper_btc/`; `digest` shows both. The same step a
 (`research/PREREGISTRATION_LAYER11.md`, test B): at the one crypto snapshot 2.5 to 3.5 hours before the 5pm ET set
 settles, it reads Fear & Greed and Binance funding and, on a signal day, buys YES at the ask on every contract with a
 mid of 90 cents or more, logging to `data/raw/paper_l11/` (every evaluation, signal or not, with the mood readings).
-The live log is a mirror for watching; test B itself is computed on or after 2027-02-01 from the histories.
+The live log is a mirror for watching; test B itself is computed on or after 2027-02-01 from the histories. Alongside each layer 11
+trade it also logs a shadow *maker* version (never traded): a 100-lot resting bid at the YES bid instead of buying at
+the ask, because on Kalshi makers lose far less than takers (Burgi, Deng & Whelan 2026). After settlement, Kalshi's
+trade prints decide whether it would have filled: for sure if a trade printed below the bid, possibly if one printed at
+it (queue position unknown). KXBTCD is not on Kalshi's list of series charging maker fees (schedule effective
+2026-07-07), so the shadow fee is 0. The digest reports fills and their profit under both fill assumptions; resting
+bids fill more often when the price falls, so the shadow log also measures that adverse selection.
 
 Replay of the first five days (decisions only): 18 S&P and 23 Nasdaq trades. Capital tied up per day was a median of
 about $200 per index: a 100-lot at these prices risks about $20 or less.
