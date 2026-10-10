@@ -458,6 +458,13 @@ paid. So the parameters are not fragile, but the evidence that mood rather than 
 **Horizon:** 1 and 3 hours out are positive at every cut-off; 6 hours out loses at almost every cut-off, for both
 layer 11 and 11b. Layer 11b's regime cut-off (0.3 to 0.7) is +1.7 to +2.3 cents at 3 hours, all with p < 0.05.
 
+**Costs, liquidity, price buckets** (`research/robust_layer11_costs.py`, prompted by papers read on 2026-10-09). The
+edge is thin: +1.9 cents per contract after the fee, +0.9 (-0.1 to +1.6) if fills cost 1 cent more, gone at 2 cents.
+It is not illiquidity: signal days had tighter quoted spreads than other days (3.5 vs 4.1 cents). Controlling for the
+spread and Bitcoin's 7-day realized volatility, the signal-day effect is +1.8 cents at 3 hours (-0.0 to +3.6; higher
+volatility absorbs a little of it) and unchanged at 1 hour (+2.7, +1.1 to +4.6). It is positive in every price bucket
+on signal days (1-3, 4-6 and 7-10 cents), largest for the 7-10 cent long shots (+3.7 cents).
+
 ## Exploratory: does Kalshi's implied Bitcoin distribution tilt with mood? Barely, and not where the money is
 
 `research/explore_skew.py`, development sample. Lee, Lee and Lee (SSRN 6748186) find Kalshi's implied Bitcoin
