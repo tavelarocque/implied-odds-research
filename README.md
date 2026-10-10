@@ -508,6 +508,40 @@ out). One hour out, nothing. One pick from several comparisons, pre-registered a
 (`research/PREREGISTRATION_LAYER11B.md`) before the layer 11 holdout was analysed, and tested on it with
 `research/test_layer11b.py`.
 
+## Layers 11 and 11b on the holdout (test A, run once, 2026-10-09): both INCONCLUSIVE
+
+The holdout (5pm KXBTCD sets settling 2026-04-01 to 2026-09-30, 183 days) was opened for layers 11 and 11b on
+2026-10-09, after the pre-registration amendment that fixed the outcome-based strike selection
+(`research/PREREGISTRATION_LAYER11.md`, `_LAYER11B.md`). `research/test_layer11.py` and `test_layer11b.py`, one run each.
+
+**Layer 11, primary (3 hours out, fear-or-funding signal days):** 519 trades on 94 days; the long shot paid on 5
+(1.0%), on 2 days; break-even loss rate 2.28%; exact upper bound per trade 2.01% (below break-even), per day 6.55%
+(above it); mean +1.32 cents per contract (-0.39 to +2.32). **VERDICT: INCONCLUSIVE.** Reported alongside: non-signal
+days 3h, 471 trades, 0.6% paid, +1.65 cents (+0.79 to +2.28); signal days 1h, 291 trades, 1 paid, +2.02 cents (+1.18 to
++2.48); non-signal days 1h, 266 trades, 1.5% paid, +0.75 cents (-1.55 to +2.34).
+
+**Layer 11b, primary (3 hours out, HMM turbulent days):** 235 trades on 33 days; 1 paid (0.4%); break-even 2.24%; upper
+bound per trade 2.00%, per day 13.59%; mean +1.81 cents (+0.77 to +2.36). **VERDICT: INCONCLUSIVE.** Other days: 755
+trades, 0.9% paid, +1.37 cents (+0.10 to +2.20). Turbulent days without a layer 11 signal: 74 trades, none paid, +2.30
+cents. One hour out, turbulent days: 130 trades, none paid, +2.41 cents.
+
+**Reading.** The predictions written down in advance ("inconclusive or edge, mean profit positive, non-signal days near
+zero") held for the first two and failed for the third. Selling downside long shots 3 hours out made money on the
+holdout whether or not the crowd was fearful (+1.32 cents on signal days, +1.65 on the rest), so at 3 hours the
+holdout does not support mood as the cause; the development sample's contrast (+1.9 vs about 0) did not repeat. At 1
+hour the mood contrast did hold in direction (+2.0 vs +0.8), which matches every development-sample check (the 1-hour
+effect survived spread, volatility and DVOL controls), but 1 hour was a reported line, not the primary test.
+
+**A flaw in my own bar.** The per-day criterion counts a day with any loss as a losing day but compares that rate with
+the per-trade break-even. With about five trades a day, the daily loss rate is roughly five times the per-trade rate,
+so a profitable rule can almost never pass it. Both tests passed the per-trade bound and failed only the per-day one.
+That was a design error in the pre-registration, recorded here and not changed after the fact; the next
+pre-registration should compare day-level profit, or the day-level loss rate with a day-level break-even.
+
+**What stands.** Kalshi's downside Bitcoin long shots, 1 to 3 hours before the 5pm settlement, paid out about 1% of the
+time against a break-even of about 2.3% across April to September 2026, after fees, at the ask. Whether that is a
+lasting edge is test B's question: the live forward test runs to 2027-01-31 (paper trader, `data/raw/paper_l11/`).
+
 ## Robustness of layers 11 and 11b on the development sample: a plateau, but the mood timing is only borderline
 
 `research/robust_layer11.py`, development data only, nothing pre-registered changed. **Grid** (3 hours out): all 64

@@ -1,0 +1,6 @@
+Holdout 2026-04-01 to 2026-09-30: 183 5pm sets; signal days 94 of 183 days with a quoted downside long shot
+  PRIMARY, 3 hours before, signal days: 519 trades on 94 days; long shot paid on 5 (1.0%), days with a loss 2; break-even loss rate 2.28%; upper bound per trade 2.01%, per day 6.55%; lower bound per trade 0.38%; mean +1.32c per contract (-0.39 to +2.32)
+  VERDICT: INCONCLUSIVE
+  PRIMARY, 3 hours before, non-signal days: 471 trades on 89 days; long shot paid on 3 (0.6%), days with a loss 3; break-even loss rate 2.29%; upper bound per trade 1.64%, per day 8.48%; lower bound per trade 0.17%; mean +1.65c per contract (+0.79 to +2.28)
+  reported, 1 hour before, signal days: 291 trades on 93 days; long shot paid on 1 (0.3%), days with a loss 1; break-even loss rate 2.36%; upper bound per trade 1.62%, per day 5.00%; lower bound per trade 0.02%; mean +2.02c per contract (+1.18 to +2.48)
+  reported, 1 hour before, non-signal days: 266 trades on 87 days; long shot paid on 4 (1.5%), days with a loss 2; break-even loss rate 2.25%; upper bound per trade 3.41%, per day 7.06%; lower bound per trade 0.52%; mean +0.75c per contract (-1.55 to +2.34)
