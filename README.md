@@ -217,6 +217,31 @@ range, all tiny (worst -0.003) and all on the last snapshots before the close, t
 reports its fits break down. Layer 5's coarser mass check passes all of them, which is fine at that size; decisions
 still use the pre-registered checks, and this is logged as a diagnostic only.
 
+## Exploratory: options-implied volatility regime and a clean calibration map for Kalshi's Bitcoin contracts
+
+**DVOL regime** (`research/explore_btc_dvol.py`, `collect/dvol_history.py`; development sample). Almeida et al. (2024)
+find Bitcoin options price large drops most steeply when volatility is low, so an options-based regime could be the
+real driver of layer 11. Ranking Deribit's DVOL at the quote time against its previous year (no look-ahead): downside
+long-shot overpricing does not differ between low- and high-DVOL thirds (3h: -1.1 cents, -3.9 to +1.7; 1h: +0.7, -2.2
+to +3.7). With both in one regression, the mood signal survives at 1 hour (+2.9 cents, +1.0 to +5.3) while DVOL adds
+nothing; at 3 hours neither is significant on its own (signal +1.6, -0.4 to +3.9; DVOL +2.7, -1.3 to +6.5): mood and
+volatility are tangled there, as the realized-volatility control and layer 11b already suggested. Signal days lean
+high-DVOL (47% of high-DVOL days vs 21% of low).
+
+**Calibration map** (`research/explore_btc_recal.py`): every strike of every 5pm set, 12,771 contract-horizons on 631
+days. Logistic recalibration (Le 2026), logit P = a + b logit(price): b = 1.28 at 1 hour (1.18 to 1.39) and 1.30 at 3
+hours (1.20 to 1.41), 1.15 at 6 hours; no significant directional bias (a +0.15, -0.05 to +0.33 at 1h). Prices sit too
+close to 50% on both sides, the favourite-longshot pattern, and more strongly than Le's trade-based Kalshi crypto
+estimates (about 1.0 for hourly contracts). A one-parameter Prelec weighting (Snowberg & Wolfers 2010) fits alpha 0.79
+(0.74 to 0.85) at 1 and 3 hours, a stronger distortion than horse racing's 0.928: a contract priced at 5 cents implies
+a true 1.8%. Miscalibration is a small part of the Brier score (0.003 of 0.077 at 1h; discrimination 0.175), which is
+why only the conditional version (layer 11) can clear fees. These ran on the development data before the decision-time
+strike fill completed; they are rerun after it.
+
+**Fees on partial fills**: Kalshi rounds the fee plus position cost to a hundredth of a cent (fee schedule effective
+2026-07-07), so a small fill pays essentially the proportional fee; the project's rounding up to a full cent per
+100-lot is conservative.
+
 ## The ledger: every claim, adjusted for how many things were tried
 
 `research/ledger_claims.csv` lists every inferential claim the project had made by 2026-10-09 (46 rows), committed
@@ -225,7 +250,7 @@ Bitcoin layer 5, 11, 11b) join when decided. Following Harvey & Liu (2015), p-va
 positive) and BHY (false discovery rate under any dependence), and again with the number of tests doubled for
 comparisons never written down. Where a script reported only an estimate and interval, p is a normal approximation.
 
-**28 of 46 claims have p < 0.05 on their own; 15 survive BHY; 12 survive BHY with the tests doubled.** What survives:
+**28 of 46 claims have p < 0.05 on their own; 15 survive BHY; 12 survive BHY with the tests doubled.** (Six claims added later the same evening, marked in the file: 52 claims, 31, 17 and 14; the additions that survive are the two Bitcoin calibration slopes; the mood signal's survival of the DVOL control does not, BHY 0.09.) What survives:
 Kalshi ladder activity is self-exciting (all four Hawkes estimates and the S&P-vs-Nasdaq difference); Kalshi and
 Polymarket move toward each other (layer 3, both indices); Kalshi beats Polymarket on the thin Nasdaq market; Kalshi's
 CPI advantage over the nowcast is information content (CORP discrimination; the raw Brier gaps do not survive alone);

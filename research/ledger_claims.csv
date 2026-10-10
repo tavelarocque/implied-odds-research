@@ -45,3 +45,9 @@ SKa,skew,Fear-or-funding days tilt the implied distribution down 3h,ci,-0.013,-0
 SKb,skew,Fear days tilt the implied distribution down 6h,ci,-0.015,-0.024,-0.007,0,,Bowley
 STa,stale,Trading toward spot model at 20c past the touch,ci,10.14,-0.66,19.47,0,,cents
 STb,stale,Trading toward spot model at 5c past the touch,ci,-1.33,-3.65,0.91,0,,cents
+DVa,11,Downside overpricing differs between low and high DVOL thirds 3h (added after first ledger run),ci,-1.09,-3.94,1.67,0,,options regime
+DVb,11,Mood signal survives a DVOL control 1h (added after first ledger run),ci,2.92,0.96,5.27,0,,cents
+DVc,11,Mood signal survives a DVOL control 3h (added after first ledger run),ci,1.63,-0.38,3.93,0,,cents
+RCa,11,Kalshi BTC 5pm calibration slope above 1 at 1h (added after first ledger run),ci,1.275,1.177,1.393,1,,logistic recalibration
+RCb,11,Kalshi BTC 5pm calibration slope above 1 at 3h (added after first ledger run),ci,1.297,1.198,1.408,1,,logistic recalibration
+RCc,11,Kalshi BTC 5pm directional bias at 1h (added after first ledger run),ci,0.148,-0.046,0.333,0,,intercept a
