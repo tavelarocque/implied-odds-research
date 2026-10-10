@@ -78,3 +78,12 @@ Kalshi (Brier 0.129 vs 0.125 on hourly sets).
   2027-02-01. If neither, Kronos is dropped from the project.
 
 Nothing above changes after the results are seen.
+
+## Amendment 1, 2026-10-09 (before any Kronos path or result had been computed)
+
+Compute only, no change to the model, data or tests. On the Mac's CPU Kronos-small took about 0.25 seconds per path,
+about 12 hours for the window, so the paths are drawn on the Apple GPU (`mps`) instead, as 4 batches of 50 per
+settlement day and horizon (200 in one batch runs out of GPU memory). The torch seed is still set to 12 before each
+day and horizon; the random draws differ from what CPU would have produced, which changes nothing the tests depend on.
+A timing check on one development day (the first in the window, 1 hour out) looked only at speed and at the spread of
+the sampled prices, never at the outcome or at Kalshi.
