@@ -465,6 +465,15 @@ spread and Bitcoin's 7-day realized volatility, the signal-day effect is +1.8 ce
 volatility absorbs a little of it) and unchanged at 1 hour (+2.7, +1.1 to +4.6). It is positive in every price bucket
 on signal days (1-3, 4-6 and 7-10 cents), largest for the 7-10 cent long shots (+3.7 cents).
 
+**Is the 17% PBO informative?** (`research/robust_flatness.py`; Kim, SSRN 6508779, and Witzany 2021: PBO says little
+when every configuration performs alike.) The grid is flatter than usual: the variance of profit across its 64 cells
+sits at the 17th percentile of the circular-shift null (not below the 5th, so not formally flat, but PBO is weak
+evidence here). The best cell (+3.0 cents) is beaten by the best cell of 21% of shifted grids: the specific cut-offs are
+not special. The grid's average cell (+1.8 cents) is beaten by only 3% of shifted grids: bearish-mood days as a family
+pay more than randomly placed days with the same clustering, even though no single cut-off is significant on its own.
+Against the VALID checklist (Kim) the project meets 10 of 12 items; the gaps are class-balance reporting (not
+applicable to a fixed rule) and public code (the repository is private).
+
 ## Exploratory: does Kalshi's implied Bitcoin distribution tilt with mood? Barely, and not where the money is
 
 `research/explore_skew.py`, development sample. Lee, Lee and Lee (SSRN 6748186) find Kalshi's implied Bitcoin
