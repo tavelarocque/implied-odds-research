@@ -65,8 +65,9 @@ def sample_paths():
     from model import Kronos, KronosTokenizer, KronosPredictor
     tok = KronosTokenizer.from_pretrained("NeoQuasar/Kronos-Tokenizer-base")
     mdl = Kronos.from_pretrained("NeoQuasar/Kronos-small")
-    # Amendment 1 (pre-registration): Apple GPU ("mps"), 200 paths drawn as 4 batches of 50. CPU took about 0.25 s
-    # per path, roughly 12 hours for the whole window; 200 at once runs out of GPU memory.
+    # Amendment 1 (pre-registration): Apple GPU ("mps"), 200 paths drawn as 8 batches of 25. CPU took about 0.25 s
+    # per path, roughly 12 hours for the whole window; 200 at once runs out of GPU memory and 50
+    # stalls 3 hours out on this 8 GB Mac.
     pred = KronosPredictor(mdl, tok, device=os.environ.get("KRONOS_DEVICE", "mps"), max_context=CONTEXT)
     cb, mk = coinbase(), markets()
     done = dict(np.load(CACHE)) if os.path.exists(CACHE) else {}
@@ -83,8 +84,8 @@ def sample_paths():
             xt = pd.Series(pd.to_datetime(x.index, unit="s"))
             yt = pd.Series(pd.to_datetime([end - (h - i) * 3600 for i in range(h)], unit="s"))
             fin = []
-            for _ in range(N_PATHS // 50):
-                out = pred.predict_batch([df] * 50, [xt] * 50, [yt] * 50, pred_len=h,
+            for _ in range(N_PATHS // 25):
+                out = pred.predict_batch([df] * 25, [xt] * 25, [yt] * 25, pred_len=h,
                                          T=1.0, top_k=0, top_p=0.9, sample_count=1, verbose=False)
                 fin += [o["close"].values[-1] for o in out]
             done[key] = np.array(fin)
