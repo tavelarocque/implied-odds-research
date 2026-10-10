@@ -604,6 +604,35 @@ trades); 10 cents, -0.2 (-3.1 to +2.9, 724). Only the 20-cent threshold is posit
 trades in 40 sets, a median 20 minutes before the hour: possibly genuinely stale quotes after fast moves, but too few
 to tell and one of three thresholds. Not pursued unless a finer test (seconds, not minutes) is worth building.
 
+## Layer 12, pre-registered: Kronos (a pretrained candlestick model) vs Kalshi on Bitcoin. Kalshi wins
+
+`research/PREREGISTRATION_LAYER12.md` (committed before any run, two compute-only amendments before any scoring),
+`research/test_layer12_kronos.py`. Kronos-small (Shi et al., Tsinghua, AAAI 2026; 24.7M parameters, pretrained on
+about 12 billion candlesticks) read the 512 hourly Coinbase candles before each quote and sampled 200 paths to the 5pm
+ET settlement; its probability for "BTC above K" is the share of paths that finish above K. Scored against Kalshi's
+mid on every 5pm KXBTCD strike within 6% of the price, 1 and 3 hours out, settling 2025-09-01 to 2026-03-31: after
+Kronos was published and before the holdout, 210 days (2025-10-25 left out: Coinbase has no candles that afternoon).
+
+- **Verdict: fails.** Brier, Kronos minus Kalshi: 1 hour out **+0.0140** (97.5%: +0.0028 to +0.0266, 876 contracts),
+  Kalshi better; 3 hours out +0.0057 (-0.0023 to +0.0138, 1,832), no difference shown. Kronos is worse at both. The
+  pre-registered prediction (Kalshi wins at both) was right at 1 hour.
+- **Does Kalshi's price already contain what Kronos sees? (secondary)** Alongside Kalshi's price, Kronos's
+  coefficient is +0.15 (-0.05 to +0.37) at 1 hour and **+0.23 (+0.05 to +0.41) at 3 hours**. Raw p 0.014, but it does
+  not survive the ledger's BHY correction (0.14). Checked afterwards (not pre-registered): a plain lognormal model
+  (spot price and the last 24 hours' volatility) adds as much or more (+0.45 at 3 hours), and Kronos's probabilities
+  correlate 0.94 with it in log-odds. With both in, Kronos keeps +0.21 (+0.04 to +0.40). So most of what Kalshi leaves
+  on the table is ordinary information, consistent with its prices being too close to 50% (calibration slope about
+  1.3, layer 11), not pattern-reading only Kronos can do.
+- **By efficiency ratio (secondary):** Kronos's coefficient is larger on trending days (3 hours: +0.32, +0.10 to
+  +0.60) than choppy ones (+0.13, -0.14 to +0.40), the direction the idea predicted, but the two intervals overlap and
+  it is one split of a secondary. Its Brier is still worse than Kalshi's on both kinds of day.
+- **Description:** Brier 1 hour: Kronos 0.084, Kalshi 0.070, lognormal 0.070; 3 hours: 0.082, 0.076, 0.075. Kronos's
+  loss is mostly discrimination, not calibration. Its spread is about right at 1 hour (0.43% vs a realized 0.44%) and
+  too narrow at 3 hours (0.63% vs 0.81%).
+- **Next, as pre-registered:** the 3-hour secondary was positive, so Kronos's probabilities are to be logged live (no
+  trades) and the primary statistic tested once on sets settling 2026-10-15 to 2027-01-31. Kronos as a forecaster on
+  its own is dropped: a free lognormal model does as well as Kalshi and Kronos does worse.
+
 ## Paper trading the layer 5 rule
 
 `trade/paper.py` runs layer 5's trading rule live: after every collection run it fits the options, checks each

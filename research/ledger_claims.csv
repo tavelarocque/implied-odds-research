@@ -51,3 +51,7 @@ DVc,11,Mood signal survives a DVOL control 3h (added after first ledger run),ci,
 RCa,11,Kalshi BTC 5pm calibration slope above 1 at 1h (added after first ledger run),ci,1.275,1.177,1.393,1,,logistic recalibration
 RCb,11,Kalshi BTC 5pm calibration slope above 1 at 3h (added after first ledger run),ci,1.297,1.198,1.408,1,,logistic recalibration
 RCc,11,Kalshi BTC 5pm directional bias at 1h (added after first ledger run),ci,0.148,-0.046,0.333,0,,intercept a
+K12a,12,Kronos-small vs Kalshi mid Brier 1h (Kalshi better; pre-registered),p,0.0140,0.0028,0.0266,0,0.002,day bootstrap; 97.5% interval
+K12b,12,Kronos-small vs Kalshi mid Brier 3h (pre-registered),p,0.0057,-0.0023,0.0138,0,0.108,day bootstrap; 97.5% interval
+K12c,12,Kronos adds information beyond Kalshi's price 1h (pre-registered secondary),p,0.145,-0.048,0.365,0,0.138,logit coefficient; day bootstrap
+K12d,12,Kronos adds information beyond Kalshi's price 3h (pre-registered secondary),p,0.229,0.054,0.412,0,0.014,logit coefficient; day bootstrap

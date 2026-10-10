@@ -1,0 +1,23 @@
+Layer 12, Kronos-small vs Kalshi, 5pm Bitcoin sets settling 2025-09-01 to 2026-03-31
+2708 quoted contract-horizons on 210 days (0 strikes in the band had no candles)
+
+1h before settlement: 876 contracts, 174 days
+  PRIMARY  Brier Kronos - Kalshi +0.01400 (97.5%: +0.00281 to +0.02663) -> Kalshi beats Kronos
+  kronos    Brier 0.0836 = miscalibration 0.0115 - discrimination 0.1778 + uncertainty 0.2500
+  mid       Brier 0.0696 = miscalibration 0.0062 - discrimination 0.1866 + uncertainty 0.2500
+  lognormal Brier 0.0699 = miscalibration 0.0071 - discrimination 0.1872 + uncertainty 0.2500
+  SECONDARY 1  Kronos coefficient alongside Kalshi's price: +0.145 (95%: -0.048 to +0.365)
+  SECONDARY 2  choppy (ER below median): 87 days, Kronos coefficient +0.107 (-0.220 to +0.425); Brier Kronos - Kalshi +0.00890
+  SECONDARY 2  trending (ER above median): 87 days, Kronos coefficient +0.167 (-0.121 to +0.498); Brier Kronos - Kalshi +0.01841
+  Kronos 1-sd of the final price 0.43% (root-mean-square over days) vs realized move sd 0.44%
+
+3h before settlement: 1832 contracts, 209 days
+  PRIMARY  Brier Kronos - Kalshi +0.00571 (97.5%: -0.00227 to +0.01377) -> no difference shown
+  kronos    Brier 0.0815 = miscalibration 0.0041 - discrimination 0.1726 + uncertainty 0.2500
+  mid       Brier 0.0758 = miscalibration 0.0042 - discrimination 0.1784 + uncertainty 0.2500
+  lognormal Brier 0.0747 = miscalibration 0.0037 - discrimination 0.1790 + uncertainty 0.2500
+  SECONDARY 1  Kronos coefficient alongside Kalshi's price: +0.229 (95%: +0.054 to +0.412)
+  SECONDARY 2  choppy (ER below median): 104 days, Kronos coefficient +0.127 (-0.135 to +0.399); Brier Kronos - Kalshi +0.00762
+  SECONDARY 2  trending (ER above median): 105 days, Kronos coefficient +0.318 (+0.098 to +0.597); Brier Kronos - Kalshi +0.00401
+  Kronos 1-sd of the final price 0.63% (root-mean-square over days) vs realized move sd 0.81%
+
