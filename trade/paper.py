@@ -254,17 +254,28 @@ def l11_mood(close):
                 fg = int(x["value"])
     except Exception:
         pass
-    funding = None
+    funding, source = None, None
+    end = close - pd.Timedelta(hours=6)
+    window = lambda t: end - pd.Timedelta(hours=24) < pd.Timestamp(int(t), unit="ms", tz="UTC") <= end
     try:
-        end = close - pd.Timedelta(hours=6)
         page = get_json("https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&startTime="
                         f"{int((end - pd.Timedelta(hours=30)).timestamp() * 1000)}&limit=20", retries=2)
-        r = [float(p["fundingRate"]) for p in page
-             if end - pd.Timedelta(hours=24) < pd.Timestamp(p["fundingTime"], unit="ms", tz="UTC") <= end]
-        funding = float(np.mean(r)) if r else None
+        r = [float(p["fundingRate"]) for p in page if window(p["fundingTime"])]
+        funding, source = (float(np.mean(r)), "binance") if r else (None, None)
     except Exception:
         pass
-    return fg, funding
+    # Binance refuses US cloud servers (GitHub's runners), so live runs fall back to OKX's BTC-USDT perpetual, also
+    # 8-hourly. Live mirror only: the layer 11 verdict recomputes funding from Binance's history afterwards. OKX's
+    # rates track Binance's but are not identical, so a fallback day's signal is approximate; `funding_source` says which.
+    if funding is None:
+        try:
+            page = get_json("https://www.okx.com/api/v5/public/funding-rate-history?instId=BTC-USDT-SWAP&limit=12",
+                            retries=2)["data"]
+            r = [float(p["fundingRate"]) for p in page if window(p["fundingTime"])]
+            funding, source = (float(np.mean(r)), "okx") if r else (None, None)
+        except Exception:
+            pass
+    return fg, funding, source
 
 
 def live_l11(krows, kpath, now):
@@ -283,11 +294,12 @@ def live_l11(krows, kpath, now):
     day = close.strftime("%Y-%m-%d")
     if any(rows and rows[0].get("evaluated") for _, rows in logged_runs(day, "paper_l11")):
         print("paper l11: this set was already evaluated"); return
-    fg, funding = l11_mood(close)
+    fg, funding, funding_source = l11_mood(close)
     signal = (fg is not None and fg <= L11_FG) or (funding is not None and funding <= L11_FUNDING)
     run = {"type": "run", "day": day, "event": ms[0]["event_ticker"], "snap": krows[0]["collected_utc"],
            "decided_utc": now.isoformat(), "hours_to_close": h, "commit": os.environ.get("GITHUB_SHA", "local"),
-           "evaluated": True, "fear_greed": fg, "funding": funding, "signal": bool(signal)}
+           "evaluated": True, "fear_greed": fg, "funding": funding, "funding_source": funding_source,
+           "signal": bool(signal)}
     trades = []
     if signal:
         for m in ms:
@@ -313,7 +325,7 @@ def live_l11(krows, kpath, now):
     with gzip.open(out, "wt") as f:
         for r in [run] + trades + makers:
             f.write(json.dumps(r) + "\n")
-    print(f"paper l11: F&G {fg}, funding {funding}; signal {'YES' if signal else 'no'}; {len(trades)} trades "
+    print(f"paper l11: F&G {fg}, funding {funding} ({funding_source}); signal {'YES' if signal else 'no'}; {len(trades)} trades "
           f"-> {os.path.relpath(out, ROOT)}")
     for x in trades:
         print(f"  buy {x['qty']} YES {x['ticker']} at {100 * x['price']:.0f}c, ties up ${x['capital']:.2f}")
