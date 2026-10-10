@@ -1,0 +1,47 @@
+id,layer,claim,kind,est,lo,hi,null,p,note
+L4a,4,S&P calibration slope 1h above 1,ci,1.09,1.01,1.20,1,,day resamples
+L4b,4,Nasdaq calibration slope 1h above 1,ci,1.07,0.99,1.15,1,,pre-registered replication
+L4c,4,Nasdaq calibration slope 3h above 1,ci,1.09,1.01,1.17,1,,pre-registered replication
+L4d,4,Nasdaq: sell under-2c long shots 1h (best of 58 buckets),p,,,,,0.26,family-wise fair-market Monte Carlo
+L4e,4,S&P: best price bucket (best of 66),p,,,,,0.54,family-wise fair-market Monte Carlo
+L4f,4,Nasdaq long-shot rule on the holdout: loss rate below break-even 0.93%,p,,,,,0.161,0 of 195; P(0 | 0.93%)
+L6a,6,Nasdaq: Kalshi Brier beats Polymarket (pooled),ci,-0.014,-0.021,-0.006,0,,post hoc
+L6b,6,S&P: Kalshi vs Polymarket Brier differ,ci,0.002,-0.007,0.011,0,,
+L2a,2,In-sample best of ~2000 ETF rules beats shuffled histories,p,,,,,0.031,Masters permutation
+L2b,2,Walk-forward re-picked rule beats shuffled histories,p,,,,,0.45,Masters permutation
+L3a,3,S&P: Kalshi-Polymarket gap closes,p,,,,,0.001,permutation 1000 day shuffles
+L3b,3,Nasdaq: Kalshi-Polymarket gap closes,p,,,,,0.001,permutation 1000 day shuffles
+L3c,3,S&P: Kalshi's share of adjustment differs from 0.5,ci,0.42,-0.09,0.76,0.5,,
+L3d,3,Nasdaq: Kalshi's share of adjustment differs from 0.5,ci,0.53,0.05,0.82,0.5,,
+HKa,hawkes,S&P quote activity self-exciting (day effects),ci,0.676,0.531,0.768,0,,
+HKb,hawkes,S&P trades self-exciting (day effects),ci,0.463,0.405,0.505,0,,
+HKc,hawkes,Nasdaq quote activity self-exciting (day effects),ci,0.827,0.739,0.955,0,,
+HKd,hawkes,Nasdaq trades self-exciting (day effects),ci,0.273,0.205,0.333,0,,
+HKe,hawkes,S&P trades excite more than Nasdaq trades,ci,0.19,0.11,0.27,0,,
+L9,9,Attention widens long-shot overpricing (2 of 48 comparisons significant),p,,,,,0.70,binomial P(>=2 of 48 at 5%)
+L10a,10,Headline CPI: Kalshi Brier beats nowcast,ci,-0.048,-0.084,-0.013,0,,release resamples
+L10b,10,Core CPI: Kalshi Brier beats nowcast,ci,-0.037,-0.068,-0.003,0,,release resamples
+L10c,10,CPI: Kalshi's advantage is discrimination (CORP),ci,0.035,0.011,0.057,0,,added 2026-10-09
+AVa,attention-vol,Crash-page attention predicts realized > VIX-implied variance next day,ci,0.37,0.08,0.75,0,,vs 30-day VIX
+AVb,attention-vol,Same vs VIX9D,ci,0.20,-0.05,0.51,0,,
+EFa,efficiency,Efficiency model AUC beats today's efficiency,ci,0.041,0.020,0.063,0,,
+EFb,efficiency,Efficiency model AUC beats 20-day efficiency,ci,0.022,0.003,0.040,0,,
+EFc,efficiency,Choppy days move less than VIX implies,ci,-0.08,-0.13,-0.02,0,,
+EFd,efficiency,Choppy days move less than VIX9D implies,ci,-0.14,-0.21,-0.07,0,,
+EFe,efficiency,Efficiency prediction adds beyond VIX and 50-day trend,ci,0.077,-0.511,0.664,0,,
+HMa,hmm,S&P turbulent regime adds beyond VIX and trend,ci,0.077,-0.061,0.183,0,,
+HMb,hmm,BTC turbulent days: downside long shots more overpriced 3h,ci,2.53,0.82,4.67,0,,cents; became 11b
+L11a,11,Fear days: downside long shots more overpriced 1h,ci,2.3,1.0,4.0,0,,cents
+L11b,11,Fear days: downside long shots more overpriced 3h,ci,2.3,0.8,4.1,0,,cents; midpoint of reported range
+L11c,11,Low funding: downside long shots more overpriced 1h,ci,1.8,0.4,3.4,0,,cents
+L11d,11,Low funding: downside long shots more overpriced 3h,ci,1.2,-0.6,2.9,0,,cents
+L11e,11,Mood family: 3 of 10 pre-listed comparisons pass,p,,,,,0.0115,binomial P(>=3 of 10 at 5%)
+L11f,11,Selling downside long shots on signal days 3h is profitable,ci,1.87,0.82,2.64,0,,cents
+L11g,11,Pre-registered cell beats circular shifts,p,,,,,0.066,Monte Carlo
+L11h,11,Best grid cell beats best shifted cell,p,,,,,0.53,family-wise Monte Carlo
+L11i,11,Grid average beats shifted grids,p,,,,,0.03,Monte Carlo
+L11j,11,Signal effect survives spread and volatility controls 1h,ci,2.69,1.08,4.63,0,,cents
+SKa,skew,Fear-or-funding days tilt the implied distribution down 3h,ci,-0.013,-0.028,-0.0001,0,,Bowley
+SKb,skew,Fear days tilt the implied distribution down 6h,ci,-0.015,-0.024,-0.007,0,,Bowley
+STa,stale,Trading toward spot model at 20c past the touch,ci,10.14,-0.66,19.47,0,,cents
+STb,stale,Trading toward spot model at 5c past the touch,ci,-1.33,-3.65,0.91,0,,cents
