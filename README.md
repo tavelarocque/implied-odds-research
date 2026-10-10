@@ -542,6 +542,13 @@ pre-registration should compare day-level profit, or the day-level loss rate wit
 time against a break-even of about 2.3% across April to September 2026, after fees, at the ask. Whether that is a
 lasting edge is test B's question: the live forward test runs to 2027-01-31 (paper trader, `data/raw/paper_l11/`).
 
+**Development numbers after the strike fix** (rerun 2026-10-09 once `collect/kalshi_btc_fill.py` had added the
+decision-time strikes to the development sample too): essentially unchanged. Layer 11's 3-hour signal-day profit
++1.78 cents (+0.97 to +2.36; was +1.87), other days -0.56; fear-day overpricing +2.4 cents at 1h and +2.2 at 3h; the
+signal effect with spread and volatility controls +2.0 cents at 3h (+0.4 to +3.8) and +2.7 at 1h (+1.3 to +4.5); the
+calibration slope 1.26 at 1h and 1.27 at 3h, Prelec alpha 0.80, a 5-cent contract implying a true 1.9-2.0%. The leak
+was real but small on this sample, as the check predicted.
+
 ## Robustness of layers 11 and 11b on the development sample: a plateau, but the mood timing is only borderline
 
 `research/robust_layer11.py`, development data only, nothing pre-registered changed. **Grid** (3 hours out): all 64
