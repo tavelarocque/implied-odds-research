@@ -11,6 +11,9 @@ data/history/crypto/coinbase_1h.csv), i.e. chosen with information available at 
 and storage as kalshi_btc_daily.py. Resumable.
 
 Run from collect/:  LAYER11_HOLDOUT=1 python3 kalshi_btc_fill.py   (holdout window)   or without it (development)
+
+Layer 12 (Kronos, research/PREREGISTRATION_LAYER12.md) scores every strike within 6% EITHER side of the decision-time
+price, so it also needs the strikes above it:  FILL_ABOVE=1 FILL_FROM=2025-09-01 python3 kalshi_btc_fill.py
 """
 import gzip, json, os, sys, time, urllib.parse
 import pandas as pd
@@ -30,6 +33,8 @@ def main():
         m = json.loads(l)
         day = (m.get("close_time") or "")[:10]
         holdout = os.environ.get("LAYER11_HOLDOUT") == "1"
+        if day < os.environ.get("FILL_FROM", ""):
+            continue
         if (holdout and not (FINAL_TEST_START <= day <= "2026-09-30")) or (not holdout and day >= FINAL_TEST_START):
             continue
         if not m["event_ticker"].endswith("17") or m.get("strike_type") != "greater" or m.get("floor_strike") is None:
@@ -38,7 +43,8 @@ def main():
             continue
         end = ts(m["close_time"]); K = float(m["floor_strike"])
         spots = [px.get(end - h * 3600 - 3600) for h in (1, 3)]
-        if any(s is not None and s == s and s * 0.94 < K < s for s in spots):
+        above = os.environ.get("FILL_ABOVE") == "1"
+        if any(s is not None and s == s and s * 0.94 < K < (s * 1.06 if above else s) for s in spots):
             todo.append(m)
     print(f"{WINDOW[0]} to {WINDOW[1]}: {len(todo)} strikes to add", flush=True)
     for i, m in enumerate(todo):
