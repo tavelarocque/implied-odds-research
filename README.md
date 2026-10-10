@@ -206,6 +206,25 @@ The Nasdaq long-shot bucket is what a 58-way search of a fair market finds about
 t-statistic says otherwise (p 0.003), but it estimates noise from data with one loss in 473 trades, the same
 failure that collapsed the holdout bootstrap; the script prints both so the difference is visible.
 
+## The ledger: every claim, adjusted for how many things were tried
+
+`research/ledger_claims.csv` lists every inferential claim the project had made by 2026-10-09 (46 rows), committed
+(7a11961) before `research/ledger.py` computed any adjustment. Pre-registered verdicts still pending (layers 5, 7, 7b,
+Bitcoin layer 5, 11, 11b) join when decided. Following Harvey & Liu (2015), p-values are adjusted with Holm (any false
+positive) and BHY (false discovery rate under any dependence), and again with the number of tests doubled for
+comparisons never written down. Where a script reported only an estimate and interval, p is a normal approximation.
+
+**28 of 46 claims have p < 0.05 on their own; 15 survive BHY; 12 survive BHY with the tests doubled.** What survives:
+Kalshi ladder activity is self-exciting (all four Hawkes estimates and the S&P-vs-Nasdaq difference); Kalshi and
+Polymarket move toward each other (layer 3, both indices); Kalshi beats Polymarket on the thin Nasdaq market; Kalshi's
+CPI advantage over the nowcast is information content (CORP discrimination; the raw Brier gaps do not survive alone);
+the efficiency model beats today's efficiency and its choppy days move less than the 9-day VIX implies (but layer EF's
+own follow-up shows that is the 50-day trend); and, on the development sample, layer 11's fear-day effect at one hour,
+its survival of spread and volatility controls, and its profitability against zero. What does not: every calibration
+slope, every "best of a search" bucket, the Nasdaq long-shot holdout, the attention and stale-quote ideas, and layer
+11's pre-registered cell against randomly placed days (p 0.066), which is the comparison that matters for whether mood,
+rather than the period, drives it. That is the question the holdout answers.
+
 ## Research plan
 
 1. **Data pipeline.** Live matched snapshots of SPX options and Kalshi markets (running now), plus Kalshi's
