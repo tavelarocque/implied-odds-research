@@ -352,7 +352,27 @@ def l13_lognormal(close):
         return None
     sigma1 = float(np.diff(np.log(c.close.values)).std(ddof=1))
     tau = (close - last_end).total_seconds() / 3600
-    return float(c.close.iloc[-1]), sigma1, tau, last_end.isoformat()
+    er24 = float(abs(c.close.iloc[-1] - c.open.iloc[0]) / (c.high.max() - c.low.min()))
+    return float(c.close.iloc[-1]), sigma1, tau, last_end.isoformat(), er24
+
+
+def l13c_meta():
+    """Layer 13c's frozen meta-labeling model (research/layer13c_model.json) and Deribit's DVOL at the last completed
+    hour. Returns (model, dvol); dvol is None if Deribit is unreachable."""
+    sys.path.insert(0, os.path.join(ROOT, "collect"))
+    from common import get_json
+    model = json.load(open(os.path.join(ROOT, "research", "layer13c_model.json")))
+    dvol = None
+    try:
+        end = pd.Timestamp.now(tz="UTC").floor("h")
+        rows = get_json("https://www.deribit.com/api/v2/public/get_volatility_index_data?currency=BTC&resolution=3600"
+                        f"&start_timestamp={int((end - pd.Timedelta(hours=3)).timestamp() * 1000)}"
+                        f"&end_timestamp={int(end.timestamp() * 1000)}", retries=2)["result"]["data"]
+        done = [r for r in rows if r[0] + 3600 * 1000 <= end.timestamp() * 1000]
+        dvol = float(done[-1][4]) if done else None
+    except Exception:
+        pass
+    return model, dvol
 
 
 def live_l13(krows, kpath, now):
@@ -384,8 +404,14 @@ def live_l13(krows, kpath, now):
     if ln is None:
         run.update(evaluated=False, reason=run.get("reason", "Coinbase hourly candles incomplete"))
     else:
-        spot, sigma1, tau, cb_hour = ln
-        run.update(evaluated=True, spot=spot, sigma_1h=sigma1, tau=tau, coinbase_hour=cb_hour)
+        spot, sigma1, tau, cb_hour, er24 = ln
+        run.update(evaluated=True, spot=spot, sigma_1h=sigma1, tau=tau, coinbase_hour=cb_hour, er24=er24)
+        try:
+            meta, dvol = l13c_meta()
+        except Exception as e:
+            meta, dvol = None, None
+            run["meta_error"] = str(e)
+        run["dvol"] = dvol
     trades = []
     lg = lambda p: math.log(min(max(p, .005), .995) / (1 - min(max(p, .005), .995)))
     for m in (ms if run["evaluated"] else []):
@@ -400,10 +426,20 @@ def live_l13(krows, kpath, now):
                ("sell", bid) if bid - p - L5.fee100(bid) > L13_MARGIN else None
         if side is None:
             continue
+        # Layer 13c (research/PREREGISTRATION_LAYER13C.md): the frozen meta-labeling filter's probability that this
+        # trade wins, and whether it would take it (p_win > price paid + fee). Logged only; 13b takes every trade.
+        p_meta = meta_take = None
+        if meta is not None and dvol is not None:
+            f = np.array([abs(math.log(spot / k)) / (sigma1 * math.sqrt(tau)), ask - bid, er24, dvol])
+            z = (f - np.array(meta["mean"])) / np.array(meta["sd"])
+            p_meta = float(1 / (1 + math.exp(-(meta["coef"][0] + z @ np.array(meta["coef"][1:])))))
+            cost = (ask + L5.fee100(ask)) if side[0] == "buy" else (1 - bid + L5.fee100(bid))
+            meta_take = bool(p_meta > cost)
         trades.append(sized({"type": "trade", "series": "KXBTCD", "rule": "layer13b", "day": day, "snap": run["snap"],
                              "event": m["event_ticker"], "ticker": m["ticker"], "strike": k, "bid": bid, "ask": ask,
                              "bid_size": bsz, "ask_size": asz, "hours_to_close": h, "p_blend": p, "p_lognormal": p_ln,
-                             "mid": mid, "side": side[0], "price": float(side[1])}))
+                             "mid": mid, "side": side[0], "price": float(side[1]),
+                             "p_meta": p_meta, "meta_take": meta_take}))
     run["new_trades"] = len(trades)
     d = os.path.join(RAW, "paper_l13", day)
     os.makedirs(d, exist_ok=True)

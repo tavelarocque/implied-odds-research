@@ -663,6 +663,13 @@ prices away from 50%, which is where layer 11 found them too compressed.
   same rule on the live order book at the crypto snapshot 2.5 to 3.5 hours before each 5pm set, 100 contracts per
   trade, from 2026-10-10. Every trade and its result is in the morning digest; verdict once on or after 2027-02-01
   (edge only if the day-bootstrap interval of profit per contract is above 0, with 40+ trades on 20+ days).
+- **Layer 13c, a meta-labeling filter on 13b (`research/PREREGISTRATION_LAYER13C.md`, `research/fit_layer13c.py`):** a
+  logistic model on four decision-time features (distance to the strike in volatility units, spread, 24-hour
+  efficiency ratio, DVOL), fitted on the 400 development trades and frozen in `research/layer13c_model.json`; it takes
+  a trade when its win probability exceeds the price paid plus fee (amendment 1: the pre-registered 0.5 cut took every
+  trade, since 91.5% of them win). Development check: in sample it keeps 89% of trades, +6.8c vs -3.4c rejected, but
+  leave one month out the kept trades make +5.6c and the rejected +6.0c, so it does not generalize in development
+  either. Logged live on every 13b trade (`p_meta`, `meta_take`); verdict 2027-02-01, prediction: no difference.
 
 ## Paper trading the layer 5 rule
 
