@@ -50,3 +50,14 @@ No difference shown. Four features and a few hundred trades rarely produce a sta
 comes from the calibration correction itself, which the filter cannot add to.
 
 Nothing above changes after the coefficients are fitted or after any forward trade is seen.
+
+## Amendment 1, 2026-10-10 (after fitting on the development trades; before any forward trade exists)
+
+The first fit showed the 0.5 threshold is a design error: the development trades win 91.5% of the time, so the model's
+probability of a win is above 0.5 for every trade and the filter would take 100% of them, in sample and leave one
+month out. The rule becomes the one the trade's own economics imply: **take a 13b trade if the model's probability of
+a win is above the price paid plus the fee** (the ask plus fee for a bought YES, one minus the bid plus fee for a sold
+YES), i.e. if the filter's expected profit per contract is positive. Coefficients, features and the verdict are
+unchanged. This is the only change; whatever the development check below shows with it, nothing else is tried.
+Development fit (in sample, logistic, standardized): intercept +2.902, distance +1.290, spread -0.102, efficiency
+ratio -0.416, DVOL +0.012; 400 trades on 136 days, 91.5% winners, +5.63 cents each.

@@ -48,13 +48,13 @@ def dev_trades():
         mid = (a + b) / 2
         blend = 1 / (1 + math.exp(-(bc * T.logit(mid) + cc * T.logit(ln))))
         if blend - a - T.fee(a) > T.MARGIN:
-            pnl = r.y - a - T.fee(a)
+            pnl, cost = r.y - a - T.fee(a), a + T.fee(a)              # bought YES: wins if y = 1
         elif b - blend - T.fee(b) > T.MARGIN:
-            pnl = b - r.y - T.fee(b)
+            pnl, cost = b - r.y - T.fee(b), (1 - b) + T.fee(b)        # sold YES (= bought NO at 1 - bid): wins if y = 0
         else:
             continue
         j = np.searchsorted(dv.index.values, qt, side="right") - 1
-        rows.append({"day": r.day, "k": r.k, "pnl": pnl, "win": float(pnl > 0),
+        rows.append({"day": r.day, "k": r.k, "pnl": pnl, "win": float(pnl > 0), "cost": cost,
                      "dist_sd": abs(math.log(S / r.k)) / vol, "spread": a - b,
                      "er24": abs(x.close.iloc[-1] - x.open.iloc[0]) / (x.high.max() - x.low.min()),
                      "dvol": float(dv.values[j]) if j >= 0 and qt - dv.index.values[j] <= 3600 else np.nan})
@@ -85,7 +85,9 @@ def main():
     print(f"{len(d)} development trades on {d.day.nunique()} days, win rate {y.mean():.1%}, mean {100 * d.pnl.mean():+.2f}c")
     print("coefficients (standardized): intercept {:+.3f}, ".format(w[0]) +
           ", ".join(f"{f} {c:+.3f}" for f, c in zip(FEATURES, w[1:])))
-    tk = d.p > 0.5
+    # Amendment 1: take a trade when the filter's expected profit is positive, p_win > cost (price paid + fee), not
+    # when p_win > 0.5 (with a 91% base win rate that rule took every trade)
+    tk = d.p > d.cost
     print(f"in sample: takes {tk.mean():.0%}; taken {100 * d.pnl[tk].mean():+.2f}c vs rejected {100 * d.pnl[~tk].mean():+.2f}c")
     # leave one month out: the honest in-development check of whether the filter generalizes at all
     m = d.day.str[:7]; out = np.zeros(len(d))
@@ -93,10 +95,10 @@ def main():
         tr = (m != mo).values
         mu2, sd2 = X[tr].mean(0), X[tr].std(0, ddof=0)
         out[~tr] = prob(fit((X[tr] - mu2) / sd2, y[tr]), mu2, sd2, X[~tr])
-    tk2 = out > 0.5
+    tk2 = out > d.cost.values
     print(f"leave one month out: takes {tk2.mean():.0%}; taken {100 * d.pnl[tk2].mean():+.2f}c "
           f"({tk2.sum()} trades) vs rejected {100 * d.pnl[~tk2].mean():+.2f}c ({(~tk2).sum()} trades)")
-    json.dump({"features": FEATURES, "mean": mu.tolist(), "sd": sd.tolist(), "coef": w.tolist(), "threshold": 0.5,
+    json.dump({"features": FEATURES, "mean": mu.tolist(), "sd": sd.tolist(), "coef": w.tolist(), "rule": "take if p_win > price paid + fee (amendment 1)",
                "trained_on": f"layer 13 development trades {START} to {END}, {H}h, n={len(d)}"},
               open(OUT, "w"), indent=1)
     print(f"frozen -> {os.path.relpath(OUT, ROOT)}")
