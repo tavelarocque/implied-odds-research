@@ -670,6 +670,12 @@ prices away from 50%, which is where layer 11 found them too compressed.
   trade, since 91.5% of them win). Development check: in sample it keeps 89% of trades, +6.8c vs -3.4c rejected, but
   leave one month out the kept trades make +5.6c and the rejected +6.0c, so it does not generalize in development
   either. Logged live on every 13b trade (`p_meta`, `meta_take`); verdict 2027-02-01, prediction: no difference.
+- **Layer 14, an LLM review committee on 13b (`research/PREREGISTRATION_LAYER14.md`, `trade/committee.py`):** four
+  Grok roles (a news scout with live X and web search, an analyst, a skeptic and a risk manager) read each 13b trade
+  with the project's principles and log take or skip; 13b still takes every trade. Forward only, because an LLM's
+  backtest is contaminated by the news it was trained on. Compared with raw 13b and with 13c on the same trades;
+  verdict once on or after 2027-05-01 (value only if trades taken beat trades skipped, 20+ in each group). Prediction:
+  no difference, because it will rarely skip.
 
 ## Paper trading the layer 5 rule
 

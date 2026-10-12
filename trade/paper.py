@@ -440,6 +440,28 @@ def live_l13(krows, kpath, now):
                              "bid_size": bsz, "ask_size": asz, "hours_to_close": h, "p_blend": p, "p_lognormal": p_ln,
                              "mid": mid, "side": side[0], "price": float(side[1]),
                              "p_meta": p_meta, "meta_take": meta_take}))
+    # Layer 14 (research/PREREGISTRATION_LAYER14.md): the Grok review committee's take or skip on each trade, logged
+    # only; 13b takes every trade. Full transcripts go to data/raw/paper_l14/. Skipped quietly without XAI_API_KEY.
+    if trades:
+        try:
+            import committee as C
+            clog, cres = C.review({"spot": spot, "sigma_1h": sigma1, "tau": tau, "close_utc": close.isoformat(),
+                                   "now_utc": now.isoformat()}, trades)
+        except Exception as e:
+            clog = {"status": "error", "error": str(e)[:300]}
+            cres = [{"committee_take": None, "p_committee": None, "committee_status": "error"} for _ in trades]
+        for t, c in zip(trades, cres):
+            t.update(c)
+        run["committee_status"] = clog.get("status")
+        if clog.get("status") not in ("no_key", "no trades"):
+            d14 = os.path.join(RAW, "paper_l14", day)
+            os.makedirs(d14, exist_ok=True)
+            with gzip.open(os.path.join(d14, f"paper_l14_{os.path.basename(kpath).split('_')[-1]}"), "wt") as f:
+                f.write(json.dumps({"type": "committee", "day": day, "snap": run["snap"], **clog}) + "\n")
+            print(f"paper l14: committee {clog.get('status')} in {clog.get('secs')}s, model {clog.get('models_reported')}: "
+                  + ", ".join(f"{t['ticker'].split('-')[-1]} {t.get('committee_status')}"
+                              f"{'' if t.get('committee_take') is None else (' TAKE' if t['committee_take'] else ' SKIP')}"
+                              for t in trades))
     run["new_trades"] = len(trades)
     d = os.path.join(RAW, "paper_l13", day)
     os.makedirs(d, exist_ok=True)
@@ -657,6 +679,8 @@ def digest(days_back=1):
             else:
                 name, rng_ = "BTC L11", f"above ${t['strike']:,.0f} ({t['hours_to_close']:.1f} h to settle)"
             out = "open" if r is None else f"{'WON' if pnl > 0 else 'LOST'} ${pnl:+.2f} (settled {r.upper()})"
+            if log == "paper_l13" and t.get("committee_take") is not None:
+                out += f" [committee {'take' if t['committee_take'] else 'SKIP'}]"
             why = (f"(options said {100 * t['p_opt']:.1f}c)" if "p_opt" in t else
                    f"(blend said {100 * t['p_blend']:.1f}c)" if "p_blend" in t else "(selling the long shot)")
             print(f"  {when} PT  {name:<10} {what} x{t['qty']} on {rng_} at {100 * t['price']:.0f}c {why} -> {out}")
