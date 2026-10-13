@@ -237,6 +237,16 @@ def live_btc():
         settle(log="paper_l13", res="paper_l13_results")
     except Exception as e:                                  # never let layer 13b break the others
         print(f"paper l13: failed ({e})")
+    try:                                                    # layer 13d shadow forecasts, logging only
+        import l13d
+        l13d.live(krows, kpath, now)
+    except Exception as e:
+        print(f"paper l13d: failed ({e})")
+    try:                                                    # layer 14b daily Grok scout (18:05 UTC run only)
+        import scout
+        scout.live(krows, kpath, now)
+    except Exception as e:
+        print(f"paper l14b: failed ({e})")
 
 
 L11_FG, L11_FUNDING, L11_H, L11_TOL_H = 25, 0.0000149, 3.0, 0.5
