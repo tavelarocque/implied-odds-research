@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Implied Odds Exchange</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Implied Odds Exchange: a local trading-floor screen for the paper books.
+   Data comes from ../data/dashboard/data.js, rebuilt by trade/dashboard.py; the page re-reads it every 5 minutes. */
+:root{
+  --floor:#0a0e13; --panel:#10161e; --panel2:#0d1219; --line:#1e2935; --line2:#2a3746;
+  --ink:#e2e9f0; --dim:#8295a8; --faint:#56687a;
+  --amber:#ffb21e; --up:#2bd47d; --down:#ff5a5f; --cyan:#44c8e8;
+  --c-btc5:#44c8e8; --c-stocks:#9b8cff; --c-l13b:#ffb21e; --c-l11:#ff8fb1;
+  --disp:"Barlow Condensed","Arial Narrow",sans-serif; --body:"Barlow",system-ui,sans-serif; --num:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--floor);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums}
+.up{color:var(--up)} .down{color:var(--down)} .flat{color:var(--dim)}
+a{color:var(--cyan)}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+/* LED ticker tape: the one loud element */
+.tape{position:sticky;top:0;z-index:10;background:#06080b;border-bottom:1px solid #2d2410;overflow:hidden;height:34px;display:flex;align-items:center;
+  box-shadow:inset 0 0 18px rgba(255,178,30,.08)}
+.tape-track{display:inline-flex;white-space:nowrap;animation:tape 70s linear infinite;will-change:transform}
+.tape:hover .tape-track{animation-play-state:paused}
+.tape-item{font-family:var(--num);font-size:13.5px;color:var(--amber);padding:0 22px;border-right:1px solid #2a2212;letter-spacing:.02em;
+  text-shadow:0 0 6px rgba(255,178,30,.45)}
+.tape-item b{color:#ffe0a0;font-weight:500}
+.tape-item .up{color:var(--up);text-shadow:0 0 6px rgba(43,212,125,.45)} .tape-item .down{color:var(--down);text-shadow:0 0 6px rgba(255,90,95,.45)}
+@keyframes tape{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.tape-track{animation:none}}
+
+.wrap{max-width:1480px;margin:0 auto;padding:18px 20px 40px}
+.masthead{display:flex;flex-wrap:wrap;gap:14px 28px;align-items:flex-end;justify-content:space-between;padding:6px 0 16px;border-bottom:1px solid var(--line)}
+.brand h1{font-family:var(--disp);font-weight:700;font-size:40px;line-height:1;margin:0;letter-spacing:.01em}
+.brand p{margin:4px 0 0;color:var(--dim);font-size:14px}
+.clocks{display:flex;flex-wrap:wrap;gap:8px 26px;align-items:flex-end}
+.clock{display:grid;gap:1px}
+.clock .k{color:var(--faint);font-size:12px}
+.clock .v{font-family:var(--num);font-size:17px}
+.light{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px;background:var(--faint)}
+.light.on{background:var(--up);box-shadow:0 0 8px var(--up)} .light.off{background:var(--down)} .light.warn{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+
+/* headline numbers */
+.totals{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);margin:18px 0}
+.tot{background:var(--panel);padding:12px 16px}
+.tot .k{color:var(--dim);font-size:13px}
+.tot .v{font-family:var(--num);font-size:26px;font-weight:500;margin-top:2px}
+.tot .s{color:var(--faint);font-size:12.5px;font-family:var(--num)}
+
+/* the quote board */
+.board{border:1px solid var(--line);background:var(--panel2);margin-bottom:22px;overflow-x:auto}
+.board table{width:100%;border-collapse:collapse;min-width:980px}
+.board th{font-family:var(--disp);font-weight:600;font-size:15px;color:var(--dim);text-align:right;padding:9px 14px;border-bottom:1px solid var(--line2);background:#0c1117;letter-spacing:.02em}
+.board th:first-child,.board th:nth-child(2){text-align:left}
+.board td{padding:11px 14px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--num);font-size:15px;white-space:nowrap}
+.board td.book{text-align:left;font-family:var(--disp);font-size:21px;font-weight:600;letter-spacing:.01em}
+.board td.book i{display:inline-block;width:4px;height:20px;margin-right:10px;vertical-align:-3px}
+.board td.desc{text-align:left;font-family:var(--body);color:var(--dim);font-size:13.5px;white-space:normal;max-width:260px}
+.board td.big{font-size:18px;font-weight:500}
+.board tr.sum td{border-bottom:0;background:#0c1117}
+.board tr.sum td.book{font-size:19px;color:var(--dim)}
+.board .verdict{color:var(--dim)} .board .verdict b{color:var(--ink);font-weight:500}
+.flash-up{animation:fu 1.6s ease-out} .flash-down{animation:fd 1.6s ease-out}
+@keyframes fu{from{background:rgba(43,212,125,.28)}to{background:transparent}}
+@keyframes fd{from{background:rgba(255,90,95,.28)}to{background:transparent}}
+@media (prefers-reduced-motion:reduce){.flash-up,.flash-down{animation:none}}
+
+/* panels */
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.panel{background:var(--panel);border:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.panel.wide{grid-column:1/-1}
+.ph{display:flex;flex-wrap:wrap;gap:4px 16px;align-items:baseline;justify-content:space-between;padding:12px 16px 4px}
+.ph h2{font-family:var(--disp);font-weight:600;font-size:21px;margin:0;letter-spacing:.01em}
+.ph .stat{font-family:var(--num);font-size:13px;color:var(--dim)} .ph .stat b{color:var(--ink);font-weight:500}
+.chart{height:320px;margin:0 6px}
+.panel.wide .chart{height:360px}
+.note{color:var(--dim);font-size:13.5px;margin:2px 16px 14px;max-width:96ch}
+
+/* blotters */
+.blot{overflow:auto;max-height:420px;margin:4px 0 10px}
+.blot table{width:100%;border-collapse:collapse;font-family:var(--num);font-size:13px}
+.blot th{position:sticky;top:0;background:#0c1117;color:var(--dim);font-family:var(--body);font-weight:500;font-size:12.5px;text-align:right;padding:7px 12px;border-bottom:1px solid var(--line2)}
+.blot td{text-align:right;padding:6px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+.blot th:nth-child(-n+3),.blot td:nth-child(-n+3){text-align:left}
+.tag{display:inline-block;padding:1px 6px;border:1px solid currentColor;font-size:11.5px;line-height:1.4}
+.empty{color:var(--dim);padding:18px 16px}
+
+.stale{background:#2a1d05;color:var(--amber);border:1px solid #5a3e0a;padding:10px 14px;margin:14px 0 0;font-size:14px;display:none}
+footer{color:var(--faint);font-size:13px;margin-top:26px;border-top:1px solid var(--line);padding-top:14px;max-width:110ch}
+@media (max-width:900px){.grid{grid-template-columns:1fr}.brand h1{font-size:32px}.chart{height:280px}}
+</style>
+</head>
+<body>
+<div class="tape" aria-label="Live ticker"><div class="tape-track" id="tape"></div></div>
+
+<div class="wrap">
+  <div class="masthead">
+    <div class="brand">
+      <h1>Implied Odds Exchange</h1>
+      <p>Paper floor: Kalshi prices against options-implied odds. Every book trades 100-lots, after fees.</p>
+    </div>
+    <div class="clocks" id="clocks"></div>
+  </div>
+  <div class="stale" id="stale"></div>
+
+  <div class="totals" id="totals"></div>
+
+  <div class="board"><table>
+    <thead><tr><th>Book</th><th>Strategy</th><th>Today</th><th>Total P&amp;L</th><th>Settled</th><th>Win rate</th><th>Open</th><th>Last 7 days</th><th>Verdict</th></tr></thead>
+    <tbody id="board"></tbody>
+  </table></div>
+
+  <div class="grid">
+    <section class="panel wide"><div class="ph"><h2>Cumulative P&amp;L</h2><span class="stat" id="s-cum"></span></div>
+      <div class="chart" id="c-cum"></div>
+      <p class="note">Realized profit after fees, booked when each contract settles. Layer 5 is effectively one long-volatility bet, so it swings hard both ways; nothing here is a verdict.</p></section>
+
+    <section class="panel wide"><div class="ph"><h2>Bitcoin and every bet on it</h2><span class="stat" id="s-btc"></span></div>
+      <div class="chart" id="c-btc"></div>
+      <p class="note">Hourly Coinbase candles for the last 7 days. Each marker is a paper trade drawn at its strike: up-triangles bought YES (betting above), down-triangles sold YES (betting below). Green won, red lost, amber still open.</p></section>
+
+    <section class="panel"><div class="ph"><h2>Daily P&amp;L</h2><span class="stat" id="s-day"></span></div>
+      <div class="chart" id="c-day"></div></section>
+
+    <section class="panel"><div class="ph"><h2>P&amp;L by price paid</h2><span class="stat" id="s-bucket"></span></div>
+      <div class="chart" id="c-bucket"></div>
+      <p class="note">Price paid is the ask for a bought YES or one minus the bid for a sold YES. Cheap bets are long shots; 90c+ bets are near-certainties that win small and lose big.</p></section>
+
+    <section class="panel"><div class="ph"><h2>Implied vs realized volatility</h2><span class="stat" id="s-vol"></span></div>
+      <div class="chart" id="c-vol"></div>
+      <p class="note">When implied (Deribit DVOL) runs above realized, options-based odds are spread too wide. That variance risk premium is why layer 5 bleeds in quiet markets.</p></section>
+
+    <section class="panel"><div class="ph"><h2>Model health</h2><span class="stat" id="s-health"></span></div>
+      <div class="chart" id="c-health"></div>
+      <p class="note">Top: share of the last 20 layer 5 trades the options model missed (alarm above the dashed line). Bottom: running Brier score of the options probability vs Kalshi's mid on the same trades; lower is better.</p></section>
+
+    <section class="panel"><div class="ph"><h2>Layer 13 on the holdout</h2><span class="stat" id="s-rel"></span></div>
+      <div class="chart" id="c-rel"></div>
+      <p class="note">April to September 2026, scored once. Kalshi's own price is too timid at the extremes; the frozen blend pulls it back toward the diagonal.</p></section>
+
+    <section class="panel"><div class="ph"><h2>Pipeline</h2><span class="stat" id="s-pipe"></span></div>
+      <div class="chart" id="c-pipe"></div>
+      <p class="note">Collection runs committed to the data branch per day (Pacific). Expect 24 crypto runs a day and about 18 stock runs each weekday.</p></section>
+
+    <section class="panel wide"><div class="ph"><h2>Open positions</h2><span class="stat" id="s-open"></span></div>
+      <div class="blot" id="open"></div></section>
+
+    <section class="panel wide"><div class="ph"><h2>Recent settlements</h2><span class="stat" id="s-recent"></span></div>
+      <div class="blot" id="recent"></div></section>
+  </div>
+
+  <footer id="foot">Paper trading only. Built from the data branch by <span class="num">trade/dashboard.py</span>; this page re-reads it every 5 minutes. Pre-registered rules are frozen: nothing on this screen changes a trade or a verdict.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+<script>
+const DATA_URL = '../data/dashboard/data.js';
+const ORDER = ['btc5','stocks','l13b','l11'];
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const COL = k => css('--c-'+k);
+const fmt = (x,d=2) => Number(x).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const money = (x,d=2) => (x>0?'+':x<0?'−':'')+'$'+fmt(Math.abs(x),d);
+const cls = x => x>0.004?'up':x<-0.004?'down':'flat';
+const ptDay = iso => new Date(iso).toLocaleDateString('en-CA',{timeZone:'America/Vancouver'});
+const ptTime = (iso,opt={}) => new Date(iso).toLocaleString('en-CA',Object.assign({timeZone:'America/Vancouver',hour:'numeric',minute:'2-digit'},opt));
+const ptStamp = iso => new Date(iso).toLocaleString('en-CA',{timeZone:'America/Vancouver',weekday:'short',hour:'numeric',minute:'2-digit'});
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let D = null, prev = {};
+
+function plotBase(extra={}){
+  const dim=css('--dim'), line=css('--line'), mono='IBM Plex Mono, monospace';
+  const ax=()=>({gridcolor:line,zerolinecolor:css('--line2'),linecolor:line,tickfont:{family:mono,size:11,color:dim},automargin:true});
+  return Object.assign({paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',font:{family:'Barlow, sans-serif',color:css('--ink'),size:12},
+    margin:{l:52,r:14,t:10,b:36},xaxis:ax(),yaxis:ax(),hovermode:'x unified',
+    hoverlabel:{bgcolor:'#0c1117',bordercolor:css('--line2'),font:{family:mono,size:12,color:css('--ink')}},
+    legend:{orientation:'h',x:0,y:1.12,font:{size:12,color:dim},bgcolor:'rgba(0,0,0,0)'}},extra);
+}
+const cfg={displaylogo:false,responsive:true,modeBarButtonsToRemove:['toImage','lasso2d','select2d','autoScale2d']};
+
+function stats(){
+  const T=D.trades, today=ptDay(new Date().toISOString());
+  const by={};
+  for(const k of ORDER) by[k]={k,set:[],open:[],all:[]};
+  for(const t of T){ if(!by[t.layer]) continue; by[t.layer].all.push(t); (t.pnl!=null?by[t.layer].set:by[t.layer].open).push(t); }
+  for(const k of ORDER){
+    const b=by[k];
+    b.set.sort((a,c)=>a.settle.localeCompare(c.settle));
+    b.total=b.set.reduce((s,t)=>s+t.pnl,0);
+    b.today=b.set.filter(t=>ptDay(t.settle)===today).reduce((s,t)=>s+t.pnl,0);
+    b.wins=b.set.filter(t=>t.pnl>0).length;
+    b.last=b.all[b.all.length-1];
+  }
+  return by;
+}
+const maxLoss = t => t.side==='buy' ? t.qty*t.price+t.fee : t.qty*(1-t.price)+t.fee;
+const maxGain = t => t.side==='buy' ? t.qty*(1-t.price)-t.fee : t.qty*t.price-t.fee;
+const sideTxt = t => t.side==='buy'?'BUY YES':'SELL YES';
+
+function spark(set){
+  const since=Date.now()-7*864e5, pts=set.filter(t=>new Date(t.settle)>=since);
+  if(pts.length<2) return '<span class="flat">—</span>';
+  let c=0; const ys=pts.map(t=>c+=t.pnl), lo=Math.min(0,...ys), hi=Math.max(0,...ys), w=130, h=28, r=hi-lo||1;
+  const p=ys.map((y,i)=>`${(i/(ys.length-1)*w).toFixed(1)},${(h-(y-lo)/r*h).toFixed(1)}`).join(' ');
+  const z=(h-(0-lo)/r*h).toFixed(1), col=ys[ys.length-1]>=0?css('--up'):css('--down');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><line x1="0" x2="${w}" y1="${z}" y2="${z}" stroke="${css('--line2')}" stroke-dasharray="2 3"/><polyline points="${p}" fill="none" stroke="${col}" stroke-width="1.6"/></svg>`;
+}
+
+function nextCrypto(now){ const d=new Date(now); d.setUTCSeconds(0,0); d.setUTCMinutes(5); if(d<=now) d.setUTCHours(d.getUTCHours()+1); return d; }
+function nextStocks(now){
+  for(let i=0;i<24*8*2;i++){
+    const c=new Date(Math.floor(now.getTime()/18e5)*18e5 + i*18e5);
+    for(const m of [14,44]){ const x=new Date(c); x.setUTCMinutes(m,0,0);
+      const h=x.getUTCHours(), wd=x.getUTCDay();
+      if(x>now && h>=13 && h<=21 && wd>=1 && wd<=5) return x; }
+  } return null;
+}
+function usOpen(now){
+  const ny=new Date(now.toLocaleString('en-US',{timeZone:'America/New_York'}));
+  const wd=ny.getDay(), m=ny.getHours()*60+ny.getMinutes();
+  return wd>=1&&wd<=5&&m>=570&&m<960;
+}
+const until = d => { if(!d) return '—'; const s=Math.max(0,Math.round((d-Date.now())/1000)); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60;
+  return h?`${h}h ${String(m).padStart(2,'0')}m`:`${m}m ${String(x).padStart(2,'0')}s`; };
+
+function renderClocks(){
+  const now=new Date(), built=D?new Date(D.built):null, age=built?(now-built)/6e4:null;
+  const van=now.toLocaleTimeString('en-CA',{timeZone:'America/Vancouver',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  const ny=now.toLocaleTimeString('en-CA',{timeZone:'America/New_York',hour:'2-digit',minute:'2-digit',hour12:false});
+  const open=usOpen(now);
+  document.getElementById('clocks').innerHTML=`
+    <div class="clock"><span class="k">Vancouver</span><span class="v">${van}</span></div>
+    <div class="clock"><span class="k">New York</span><span class="v">${ny}</span></div>
+    <div class="clock"><span class="k">Markets</span><span class="v" style="font-size:14px"><span class="light on"></span>BTC 24/7 &nbsp; <span class="light ${open?'on':'off'}"></span>US equities ${open?'open':'closed'}</span></div>
+    <div class="clock"><span class="k">Next crypto run</span><span class="v">${until(nextCrypto(now))}</span></div>
+    <div class="clock"><span class="k">Next stock run</span><span class="v">${until(nextStocks(now))}</span></div>
+    <div class="clock"><span class="k">Screen data</span><span class="v" style="font-size:14px"><span class="light ${age==null?'':age>40?'warn':'on'}"></span>${age==null?'loading':age<1?'just now':Math.round(age)+' min old'}</span></div>`;
+  const st=document.getElementById('stale');
+  if(age!=null && age>40){ st.style.display='block'; st.textContent=`Screen data is ${Math.round(age)} minutes old. The refresh job runs on your Mac every 15 minutes, so the Mac may be asleep or offline; the trading itself runs in the cloud and is unaffected.`; }
+  else st.style.display='none';
+}
+
+function renderTape(by){
+  const m=D.market, items=[];
+  if(m){ const ch=m.px_24h?(m.spot/m.px_24h-1)*100:null;
+    items.push(`BTC <b>$${fmt(m.spot,0)}</b> ${ch==null?'':`<span class="${cls(ch)}">${ch>=0?'▲':'▼'} ${fmt(Math.abs(ch),2)}%</span>`}`);
+    items.push(`DVOL <b>${fmt(m.dvol,1)}</b>`); items.push(`Realized 24h <b>${fmt(m.rv_now,1)}</b>`);
+    items.push(`Vol premium <b>${fmt(m.dvol-m.rv_now,1)} pts</b>`); }
+  let tot=0, td=0;
+  for(const k of ORDER){ const b=by[k], L=D.layers.find(l=>l.key===k); tot+=b.total; td+=b.today;
+    items.push(`${esc(L.name)} <span class="${cls(b.total)}">${money(b.total)}</span> <span class="${cls(b.today)}">${b.today>=0?'▲':'▼'} ${money(b.today)} today</span>`); }
+  items.push(`ALL BOOKS <span class="${cls(tot)}">${money(tot)}</span>`);
+  const l11=(D.l11_runs||[]).slice(-1)[0];
+  if(l11) items.push(`L11 signal ${esc(l11.day)} <b>${l11.signal?'ON':'off'}</b>`);
+  if(D.health){ const h=D.health, mr=h.miss20.filter(x=>x!=null).slice(-1)[0];
+    items.push(`Drift ${mr==null?'—':fmt(mr*100,0)+'% misses'} <b>${mr!=null&&mr>h.band?'ALARM':'ok'}</b>`); }
+  items.push(`Verdicts <b>L5 Nov 30</b> · <b>L11/L13b Feb 1</b> · <b>L14 May 1</b>`);
+  const html=items.map(i=>`<span class="tape-item">${i}</span>`).join('');
+  document.getElementById('tape').innerHTML=html+html;
+}
+
+function renderTotals(by){
+  const all=ORDER.flatMap(k=>by[k].set), open=ORDER.flatMap(k=>by[k].open);
+  const tot=all.reduce((s,t)=>s+t.pnl,0), td=ORDER.reduce((s,k)=>s+by[k].today,0);
+  const wins=all.filter(t=>t.pnl>0).length, risk=open.reduce((s,t)=>s+maxLoss(t),0), up=open.reduce((s,t)=>s+maxGain(t),0);
+  const best=all.reduce((b,t)=>t.pnl>(b?.pnl??-1e9)?t:b,null), worst=all.reduce((b,t)=>t.pnl<(b?.pnl??1e9)?t:b,null);
+  document.getElementById('totals').innerHTML=`
+   <div class="tot"><div class="k">All books, net of fees</div><div class="v ${cls(tot)}" id="tv-tot">${money(tot)}</div><div class="s">${all.length} settled</div></div>
+   <div class="tot"><div class="k">Today (Pacific)</div><div class="v ${cls(td)}">${money(td)}</div><div class="s">${all.filter(t=>ptDay(t.settle)===ptDay(new Date().toISOString())).length} settled today</div></div>
+   <div class="tot"><div class="k">Win rate</div><div class="v">${all.length?fmt(100*wins/all.length,1):'—'}%</div><div class="s">${wins} won · ${all.length-wins} lost</div></div>
+   <div class="tot"><div class="k">Open positions</div><div class="v">${open.length}</div><div class="s">risk ${money(-risk,0)} / upside ${money(up,0)}</div></div>
+   <div class="tot"><div class="k">Best / worst trade</div><div class="v" style="font-size:20px"><span class="up">${best?money(best.pnl):'—'}</span> <span class="down">${worst?money(worst.pnl):'—'}</span></div><div class="s">single 100-lots</div></div>`;
+  if(prev.tot!=null && Math.abs(prev.tot-tot)>0.005){ const el=document.getElementById('tv-tot'); el.classList.add(tot>prev.tot?'flash-up':'flash-down'); }
+  prev.tot=tot;
+}
+
+function renderBoard(by){
+  let rows='', T=0, TD=0, S=0, W=0, O=0;
+  for(const k of ORDER){ const b=by[k], L=D.layers.find(l=>l.key===k);
+    const days=Math.ceil((new Date(L.verdict+'T12:00:00-08:00')-Date.now())/864e5);
+    const flash=prev['b'+k]!=null&&Math.abs(prev['b'+k]-b.total)>0.005?(b.total>prev['b'+k]?'flash-up':'flash-down'):''; prev['b'+k]=b.total;
+    T+=b.total; TD+=b.today; S+=b.set.length; W+=b.wins; O+=b.open.length;
+    rows+=`<tr><td class="book"><i style="background:${COL(k)}"></i>${esc(L.name)}</td><td class="desc">${esc(L.desc)}</td>
+      <td class="${cls(b.today)}">${money(b.today)}</td><td class="big ${cls(b.total)} ${flash}">${money(b.total)}</td>
+      <td>${b.set.length}</td><td>${b.set.length?fmt(100*b.wins/b.set.length,1)+'%':'—'}</td><td>${b.open.length}</td>
+      <td>${spark(b.set)}</td><td class="verdict"><b>${new Date(L.verdict+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</b><br>${days} days</td></tr>`;
+  }
+  rows+=`<tr class="sum"><td class="book">All books</td><td class="desc">Committee (L14) and 13c filter log decisions only; no P&amp;L of their own</td><td class="${cls(TD)}">${money(TD)}</td><td class="big ${cls(T)}">${money(T)}</td><td>${S}</td><td>${S?fmt(100*W/S,1)+'%':'—'}</td><td>${O}</td><td></td><td></td></tr>`;
+  document.getElementById('board').innerHTML=rows;
+}
+
+function renderCum(by){
+  const tr=[]; let all=[];
+  for(const k of ORDER){ const b=by[k]; if(!b.set.length) continue; let c=0;
+    tr.push({x:b.set.map(t=>t.settle),y:b.set.map(t=>c+=t.pnl),name:D.layers.find(l=>l.key===k).name,type:'scatter',mode:'lines',
+      line:{color:COL(k),width:2,shape:'hv'},hovertemplate:'%{y:$,.2f}'}); all=all.concat(b.set); }
+  all.sort((a,c)=>a.settle.localeCompare(c.settle)); let c=0;
+  tr.push({x:all.map(t=>t.settle),y:all.map(t=>c+=t.pnl),name:'All books',type:'scatter',mode:'lines',line:{color:css('--ink'),width:1.4,dash:'dot',shape:'hv'},hovertemplate:'%{y:$,.2f}'});
+  const l=plotBase(); l.xaxis.type='date'; l.yaxis.tickprefix='$';
+  l.shapes=[{type:'line',xref:'paper',x0:0,x1:1,y0:0,y1:0,line:{color:css('--faint'),width:1,dash:'dot'}}];
+  Plotly.react('c-cum',tr,l,cfg);
+  const peak=Math.max(0,...(()=>{let s=0;return all.map(t=>s+=t.pnl)})()), now=c;
+  document.getElementById('s-cum').innerHTML=`now <b>${money(now)}</b> · peak <b>${money(peak)}</b> · drawdown from peak <b class="${cls(now-peak)}">${money(now-peak)}</b>`;
+}
+
+function renderBTC(){
+  const m=D.market; if(!m){ document.getElementById('c-btc').innerHTML='<p class="empty">Coinbase or Deribit did not answer on the last refresh; this chart returns on the next one.</p>'; return; }
+  const since=new Date(m.px.t[0]);
+  const T=D.trades.filter(t=>t.inst==='BTC'&&t.strike&&new Date(t.snap)>=since);
+  const tr=[{type:'candlestick',x:m.px.t,open:m.px.o,high:m.px.h,low:m.px.l,close:m.px.c,name:'BTC',
+    increasing:{line:{color:css('--up'),width:1},fillcolor:'rgba(43,212,125,.35)'},decreasing:{line:{color:css('--down'),width:1},fillcolor:'rgba(255,90,95,.35)'},
+    hoverinfo:'x+y',showlegend:false}];
+  const grp=[['won',t=>t.pnl!=null&&t.pnl>0,css('--up')],['lost',t=>t.pnl!=null&&t.pnl<=0,css('--down')],['open',t=>t.pnl==null,css('--amber')]];
+  for(const [nm,f,c] of grp){ const S=T.filter(f); if(!S.length) continue;
+    tr.push({type:'scatter',mode:'markers',name:nm,x:S.map(t=>t.snap),y:S.map(t=>t.strike),
+      marker:{symbol:S.map(t=>t.side==='buy'?'triangle-up':'triangle-down'),size:S.map(t=>t.layer==='btc5'?7:11),color:c,opacity:.85,line:{width:S.map(t=>t.layer==='btc5'?0:1.5),color:'#fff'}},
+      text:S.map(t=>`${D.layers.find(l=>l.key===t.layer).name} ${sideTxt(t)} ${t.what} at ${Math.round(t.price*100)}c${t.pnl!=null?' → '+money(t.pnl):''}`),
+      hovertemplate:'%{text}<extra></extra>'}); }
+  const l=plotBase({hovermode:'closest'}); l.xaxis.type='date'; l.xaxis.rangeslider={visible:false}; l.yaxis.tickprefix='$';
+  Plotly.react('c-btc',tr,l,cfg);
+  document.getElementById('s-btc').innerHTML=`spot <b>$${fmt(m.spot,0)}</b> · ${T.length} BTC bets in 7 days · white outline = L11 / L13b`;
+}
+
+function renderDaily(by){
+  const days=[...new Set(ORDER.flatMap(k=>by[k].set.map(t=>ptDay(t.settle))))].sort();
+  const tr=ORDER.filter(k=>by[k].set.length).map(k=>({type:'bar',name:D.layers.find(l=>l.key===k).name,x:days,
+    y:days.map(d=>by[k].set.filter(t=>ptDay(t.settle)===d).reduce((s,t)=>s+t.pnl,0)),marker:{color:COL(k)},hovertemplate:'%{y:$,.2f}'}));
+  const l=plotBase({barmode:'relative'}); l.yaxis.tickprefix='$'; l.xaxis.type='category';
+  Plotly.react('c-day',tr,l,cfg);
+  const tot=days.map(d=>ORDER.reduce((s,k)=>s+by[k].set.filter(t=>ptDay(t.settle)===d).reduce((a,t)=>a+t.pnl,0),0));
+  const up=tot.filter(x=>x>0).length;
+  document.getElementById('s-day').innerHTML=`<b>${up}</b> up days of <b>${days.length}</b>`;
+}
+
+function renderBucket(by){
+  const all=ORDER.flatMap(k=>by[k].set), E=[0,10,30,50,70,90,101], lab=['<10c','10–30c','30–50c','50–70c','70–90c','90c+'];
+  const g=lab.map(()=>({n:0,w:0,p:0}));
+  for(const t of all){ const c=100*(t.side==='buy'?t.price:1-t.price); const i=E.findIndex((e,j)=>c>=e&&c<E[j+1]); if(i<0) continue; g[i].n++; g[i].w+=t.pnl>0; g[i].p+=t.pnl; }
+  const tr=[{type:'bar',x:lab,y:g.map(x=>x.p),marker:{color:g.map(x=>x.p>=0?css('--up'):css('--down'))},
+    text:g.map(x=>x.n?`${x.n} · ${Math.round(100*x.w/x.n)}% won`:''),textposition:'outside',textfont:{family:'IBM Plex Mono',size:11,color:css('--dim')},
+    hovertemplate:'%{x}: %{y:$,.2f}<extra></extra>',cliponaxis:false}];
+  const l=plotBase({hovermode:'closest',margin:{l:52,r:14,t:24,b:36}}); l.yaxis.tickprefix='$';
+  Plotly.react('c-bucket',tr,l,cfg);
+  const i=g.reduce((b,x,j)=>x.p>g[b].p?j:b,0);
+  document.getElementById('s-bucket').innerHTML=`best bucket <b>${lab[i]}</b> ${money(g[i].p)}`;
+}
+
+function renderVol(){
+  const m=D.market; if(!m){ document.getElementById('c-vol').innerHTML='<p class="empty">Waiting for Deribit and Coinbase on the next refresh.</p>'; return; }
+  const v=m.vol;
+  const tr=[{x:v.t,y:v.rv,name:'Realized 24h',type:'scatter',mode:'lines',line:{color:css('--amber'),width:1.2},hovertemplate:'%{y:.1f}%'},
+            {x:v.t,y:v.iv,name:'Implied (DVOL)',type:'scatter',mode:'lines',line:{color:css('--cyan'),width:2},fill:'tonexty',fillcolor:'rgba(68,200,232,.08)',hovertemplate:'%{y:.1f}%'}];
+  const l=plotBase(); l.xaxis.type='date'; l.yaxis.ticksuffix='%';
+  Plotly.react('c-vol',tr,l,cfg);
+  const above=v.iv.filter((x,i)=>x>v.rv[i]).length/v.iv.length;
+  document.getElementById('s-vol').innerHTML=`now <b>${fmt(m.dvol,1)}%</b> vs <b>${fmt(m.rv_now,1)}%</b> · implied higher <b>${Math.round(100*above)}%</b> of hours`;
+}
+
+function renderHealth(){
+  const h=D.health; if(!h){ document.getElementById('c-health').innerHTML='<p class="empty">Needs 5 settled layer 5 trades.</p>'; return; }
+  const tr=[{x:h.t,y:h.miss20.map(x=>x==null?null:x*100),name:'Miss rate, last 20',type:'scatter',mode:'lines',line:{color:css('--amber'),width:1.8},yaxis:'y',hovertemplate:'%{y:.0f}%'},
+    {x:h.t,y:h.brier_opt,name:'Brier, options',type:'scatter',mode:'lines',line:{color:css('--cyan'),width:1.8},yaxis:'y2',hovertemplate:'%{y:.3f}'},
+    {x:h.t,y:h.brier_mid,name:'Brier, Kalshi mid',type:'scatter',mode:'lines',line:{color:css('--ink'),width:1.4,dash:'dot'},yaxis:'y2',hovertemplate:'%{y:.3f}'}];
+  const l=plotBase(); l.xaxis.type='date'; l.xaxis.anchor='y2';
+  l.yaxis=Object.assign(l.yaxis,{domain:[0.56,1],ticksuffix:'%',rangemode:'tozero'});
+  l.yaxis2=Object.assign(plotBase().yaxis,{domain:[0,0.44]});
+  l.shapes=[{type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:h.band*100,y1:h.band*100,line:{color:css('--down'),width:1,dash:'dash'}}];
+  Plotly.react('c-health',tr,l,cfg);
+  const mr=h.miss20.filter(x=>x!=null).slice(-1)[0], bo=h.brier_opt.slice(-1)[0], bm=h.brier_mid.slice(-1)[0];
+  document.getElementById('s-health').innerHTML=`drift <b class="${mr>h.band?'down':'up'}">${mr>h.band?'ALARM':'ok'}</b> · Brier <b>${bo.toFixed(3)}</b> options vs <b>${bm.toFixed(3)}</b> Kalshi`;
+}
+
+function renderRel(){
+  const r=D.rel; if(!r){ document.getElementById('c-rel').innerHTML='<p class="empty">Holdout file not found.</p>'; return; }
+  const M=[['mid','Kalshi mid',css('--dim'),'circle'],['lognormal','Lognormal',css('--c-stocks'),'diamond'],['combo','Blend (L13)',css('--amber'),'square']];
+  const tr=[{x:[0,100],y:[0,100],type:'scatter',mode:'lines',line:{color:css('--line2'),dash:'dash',width:1},hoverinfo:'skip',showlegend:false}]
+    .concat(M.map(([k,nm,c,s])=>({x:r[k].p.map(v=>v*100),y:r[k].y.map(v=>v*100),name:`${nm} ${r[k].brier.toFixed(4)}`,type:'scatter',mode:'lines+markers',
+      line:{color:c,width:k==='combo'?2.4:1.4},marker:{color:c,size:k==='combo'?8:6,symbol:s},customdata:r[k].n,hovertemplate:`${nm}: said %{x:.0f}%, won %{y:.0f}% (n=%{customdata})<extra></extra>`})));
+  const l=plotBase({hovermode:'closest'}); l.xaxis.range=[0,100]; l.yaxis.range=[0,100]; l.xaxis.ticksuffix='%'; l.yaxis.ticksuffix='%';
+  l.xaxis.title={text:'Forecast',font:{size:11,color:css('--dim')}}; l.yaxis.title={text:'Settled YES',font:{size:11,color:css('--dim')}};
+  Plotly.react('c-rel',tr,l,cfg);
+  document.getElementById('s-rel').innerHTML=`${fmt(r.n,0)} contracts · ${r.days} days · Brier <b>${r.combo.brier.toFixed(4)}</b> vs <b>${r.mid.brier.toFixed(4)}</b>`;
+}
+
+function renderPipe(){
+  const p=D.pipeline, days=Object.keys(p.days);
+  const tr=[{type:'bar',name:'Crypto runs',x:days,y:days.map(d=>p.days[d].crypto),marker:{color:css('--cyan')},hovertemplate:'%{y}'},
+            {type:'bar',name:'Stock runs',x:days,y:days.map(d=>p.days[d].stocks),marker:{color:css('--c-stocks')},hovertemplate:'%{y}'}];
+  const l=plotBase({barmode:'group'}); l.xaxis.type='category';
+  l.shapes=[{type:'line',xref:'paper',x0:0,x1:1,y0:24,y1:24,line:{color:css('--cyan'),width:1,dash:'dot'}},{type:'line',xref:'paper',x0:0,x1:1,y0:18,y1:18,line:{color:css('--c-stocks'),width:1,dash:'dot'}}];
+  Plotly.react('c-pipe',tr,l,cfg);
+  document.getElementById('s-pipe').innerHTML=`last crypto <b>${p.last.crypto?ptStamp(p.last.crypto):'—'}</b> · last stock <b>${p.last.stocks?ptStamp(p.last.stocks):'—'}</b>`;
+}
+
+function table(rows,head){ return `<table><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`; }
+function renderBlotters(by){
+  const open=ORDER.flatMap(k=>by[k].open).sort((a,c)=>a.settle.localeCompare(c.settle));
+  const rows=open.map(t=>{ const due=new Date(t.settle), late=due<Date.now();
+    const note=t.layer==='l13b'&&t.committee!=null?`committee ${t.committee?'take':'skip'}`:'';
+    return `<tr><td>${ptStamp(t.settle)}${late?' <span class="tag" style="color:var(--amber)">awaiting result</span>':''}</td>
+      <td style="color:${COL(t.layer)}">${esc(D.layers.find(l=>l.key===t.layer).name)}</td><td>${esc(t.inst)} ${esc(t.what)}</td>
+      <td class="${t.side==='buy'?'up':'down'}">${sideTxt(t)}</td><td>${Math.round(t.price*100)}c</td><td>${t.ref!=null?fmt(100*t.ref,1)+'c':'—'}</td>
+      <td class="down">${money(-maxLoss(t))}</td><td class="up">${money(maxGain(t))}</td><td>${esc(note)}</td></tr>`; });
+  document.getElementById('open').innerHTML=open.length?table(rows,['Settles (PT)','Book','Contract','Side','Price','Model said','Max loss','Max gain','Note']):'<p class="empty">No open positions. The next crypto run places new hourly trades.</p>';
+  const risk=open.reduce((s,t)=>s+maxLoss(t),0);
+  document.getElementById('s-open').innerHTML=`<b>${open.length}</b> open · capital at risk <b>${money(-risk,0)}</b>`;
+
+  const rec=ORDER.flatMap(k=>by[k].set).sort((a,c)=>c.settle.localeCompare(a.settle)).slice(0,60);
+  const r2=rec.map(t=>`<tr><td>${ptStamp(t.settle)}</td><td style="color:${COL(t.layer)}">${esc(D.layers.find(l=>l.key===t.layer).name)}</td><td>${esc(t.inst)} ${esc(t.what)}</td>
+      <td class="${t.side==='buy'?'up':'down'}">${sideTxt(t)}</td><td>${Math.round(t.price*100)}c</td><td>${t.ref!=null?fmt(100*t.ref,1)+'c':'—'}</td>
+      <td>${t.result.toUpperCase()}</td><td class="${cls(t.pnl)}">${t.pnl>0?'WON':'LOST'} ${money(t.pnl)}</td></tr>`);
+  document.getElementById('recent').innerHTML=table(r2,['Settled (PT)','Book','Contract','Side','Price','Model said','Result','P&L']);
+  const w=rec.slice(0,20).filter(t=>t.pnl>0).length;
+  document.getElementById('s-recent').innerHTML=`last 60 · <b>${w}</b> of the last 20 won`;
+}
+
+function render(){
+  D=window.IO_DATA; if(!D) return;
+  const by=stats();
+  renderTape(by); renderTotals(by); renderBoard(by); renderClocks();
+  if(window.Plotly){ renderCum(by); renderBTC(); renderDaily(by); renderBucket(by); renderVol(); renderHealth(); renderRel(); renderPipe(); }
+  renderBlotters(by);
+  document.getElementById('foot').innerHTML=`Paper trading only. Data built ${ptStamp(D.built)} PT by <span class="num">trade/dashboard.py</span>; this page re-reads it every 5 minutes. Pre-registered rules are frozen: nothing on this screen changes a trade or a verdict.${D.market_error?` Market data error on last build: ${esc(D.market_error)}.`:''}`;
+}
+function load(){
+  const s=document.createElement('script'); s.src=DATA_URL+'?t='+Date.now();
+  s.onload=()=>{ render(); s.remove(); };
+  s.onerror=()=>{ document.getElementById('stale').style.display='block';
+    document.getElementById('stale').textContent='No data file yet. Run: cd ~/CODE/implied-odds && PYTHONPATH=. .venv/bin/python trade/dashboard.py'; s.remove(); };
+  document.head.appendChild(s);
+}
+load();
+setInterval(load, 5*60*1000);
+setInterval(()=>{ if(D) renderClocks(); }, 1000);
+</script>
+</body>
+</html>
