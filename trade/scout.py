@@ -16,7 +16,7 @@ RAW = os.path.join(ROOT, "data", "raw")
 MODEL = "grok-4.7"
 URL = "https://api.x.ai/v1/responses"
 RUN_HOUR_UTC = 18
-TIMEOUT = 120
+TIMEOUT = 240                              # search-enabled calls ran past 120 s on 2026-10-13 (first live run)
 
 PROMPT = """You are a forecasting scout for a research project. It is now {now} UTC. Bitcoin (Coinbase BTC-USD) is at
 ${spot:,.0f}. Use X search and web search for news, scheduled events (US CPI, jobs, FOMC and Fed speakers, ETF flows,
