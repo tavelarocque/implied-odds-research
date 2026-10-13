@@ -48,6 +48,30 @@ def main():
             rows.append(r)
     path = write_jsonl_gz(out_path(KIND, ts), rows)
     print(f"{ts.isoformat()} {KIND} {counts} -> {path}")
+    if KIND == "kalshi_crypto":
+        try:  # logging only: a failure here must never fail the crypto run
+            perp_funding(ts)
+        except Exception as e:
+            print(f"  kalshi perp funding: skipped ({e!r})", file=sys.stderr)
+
+
+PERP_BASE = "https://external-api.kalshi.com/trade-api/v2/margin/funding_rates"
+PERP = "KXBTCPERP"
+
+
+def perp_funding(ts):
+    """Log Kalshi's Bitcoin perpetual funding (live estimate + settled rates of the last 24 h) to data/raw/kalshi_perp.
+
+    Added 2026-10-13, data only: no layer reads it and no pre-registered rule uses it (layer 11 keeps Binance/OKX
+    funding). Kept so a later, separately pre-registered study (e.g. hedging layer 5 with the perp) has history."""
+    est = get_json(f"{PERP_BASE}/estimate?ticker={PERP}", retries=2, timeout=20)
+    q = urllib.parse.urlencode({"ticker": PERP, "start_ts": int(ts.timestamp()) - 86400, "end_ts": int(ts.timestamp())})
+    hist = get_json(f"{PERP_BASE}/historical?{q}", retries=2, timeout=20).get("funding_rates", [])
+    rows = [{"type": "header", "collected_utc": ts.isoformat(), "ticker": PERP},
+            dict(est, type="estimate"), *[dict(h, type="settled") for h in hist]]
+    path = write_jsonl_gz(out_path("kalshi_perp", ts), rows)
+    print(f"  kalshi perp funding: estimate {est.get('funding_rate')} mark {est.get('mark_price')}; "
+          f"{len(hist)} settled in 24 h -> {path}")
 
 
 if __name__ == "__main__":
