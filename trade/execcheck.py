@@ -9,7 +9,7 @@ Two measurements on every layer 5 BTC paper trade, both from Kalshi's public end
       past trades too (backfill), a capped number per run.
 Logs to data/raw/exec_check/<day>/. Never touches the paper trader's own logs or decisions.
 """
-import glob, gzip, json, math, os, subprocess, sys, urllib.error, urllib.request
+import glob, gzip, json, math, os, subprocess, sys, time, urllib.error, urllib.request
 from datetime import datetime, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -23,12 +23,16 @@ UA = {"User-Agent": "implied-odds-research/1.0"}
 
 
 def _get(path, timeout=15):
-    req = urllib.request.Request(BASE + path, headers=UA)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return r.status, json.loads(r.read().decode())
-    except urllib.error.HTTPError as e:
-        return e.code, {}
+    """One public GET; backs off and retries on Kalshi's rate limit (429)."""
+    for attempt in range(4):
+        req = urllib.request.Request(BASE + path, headers=UA)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.status, json.loads(r.read().decode())
+        except urllib.error.HTTPError as e:
+            if e.code != 429 or attempt == 3:
+                return e.code, {}
+            time.sleep(1.5 * (attempt + 1))
 
 
 def fee(price, n):
@@ -164,6 +168,7 @@ def prints_pass(now, kpath):
                   key=lambda t: t["snap"])[:MAX_PRINTS_PER_RUN]
     rows = []
     for t in todo:
+        time.sleep(0.4)                         # stay under Kalshi's public rate limit
         r, st = prints_for(t)
         base = {"type": "prints", "ticker": t["ticker"], "day": t["day"], "snap": t["snap"], "side": t["side"],
                 "price": t["price"], "kind": t.get("kind")}
@@ -205,7 +210,7 @@ def report():
                 pp += n * edge - fee(t["price"], n)
                 ex += f * edge - fee(t["price"], f)
             print(f"  N={n:>3}: full fills {sum(f >= n for f in fills)}/{len(rq)}, contracts {sum(fills):.0f}/{n * len(rq)}, "
-                  f"paper P&L ${pp:,.2f}, execution-adjusted ${ex:,.2f}, ratio {ex / pp if pp else float('nan'):.2f}")
+                  f"paper P&L ${pp:,.2f}, execution-adjusted ${ex:,.2f}, ratio " + (f"{ex / pp:.2f}" if pp > 0 else "n/a (paper P&L not positive)"))
     pr = [r for r in rows if r["type"] == "prints"]
     for c in ("confirmed", "moved", "quiet"):
         g = [r for r in pr if r["class"] == c]
