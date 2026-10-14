@@ -222,6 +222,18 @@ def live_btc():
     for x in trades:
         print(f"  {x['side']:<4} {x['qty']} {x['ticker']} at {100 * x['price']:.0f}c (options {100 * x['p_opt']:.1f}c), "
               f"ties up ${x['capital']:.2f}")
+    try:                                                    # layer 5x: re-read the book now, when a real order would land
+        import execcheck
+        execcheck.live(trades, kpath, now)
+    except Exception as e:
+        print(f"exec check: requote failed ({e})")
+    try:                                                    # layer 5m: real-money mirror, off unless KALSHI_LIVE/KALSHI_DEMO
+        import mirror
+        if mirror.mode() != "off":
+            mirror.live(trades, kpath, now)
+            settle(log="mirror", res="mirror_results")
+    except Exception as e:
+        print(f"mirror: failed ({e})")
     try:
         settle(extra={day: trades}, log="paper_btc", res="paper_btc_results")
     except Exception as e:
@@ -247,6 +259,11 @@ def live_btc():
         scout.live(krows, kpath, now)
     except Exception as e:
         print(f"paper l14b: failed ({e})")
+    try:                                                    # layer 5x: public prints around past trades (capped)
+        import execcheck
+        execcheck.prints_pass(now, kpath)
+    except Exception as e:
+        print(f"exec check: prints failed ({e})")
 
 
 L11_FG, L11_FUNDING, L11_H, L11_TOL_H = 25, 0.0000149, 3.0, 0.5
