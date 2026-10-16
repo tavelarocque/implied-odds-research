@@ -41,3 +41,5 @@ No difference on Q1 and Q3. A small gain on Q2 on CPI/FOMC days only. Ledger: L1
 ## Cost
 
 One search-enabled call a day plus one probe a week; xAI's $5 prepaid balance with auto top-up off caps the spend.
+
+2026-10-16, bug fix (transport only): on 2026-10-15 the scout's reply was cut off in transit (IncompleteRead) and the day was lost. A reply cut off or reset in transit is now retried once, 5 s later. The cut-off reply is never read, so no answer is chosen over another; the one-call-per-day cap is otherwise unchanged.

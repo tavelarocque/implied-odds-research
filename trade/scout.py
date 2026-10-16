@@ -6,7 +6,7 @@ against are logged beside it. Every Monday, one extra fixed prompt without searc
 Layer 14's committee (trade/committee.py) is untouched. Writes data/raw/paper_l14b/. Standard library + numpy/pandas.
 Hard cap: at most one scout call and one probe per UTC day, enforced by the files already on the data branch.
 """
-import gzip, hashlib, json, math, os, re, sys, time, urllib.request
+import gzip, hashlib, http.client, json, math, os, re, sys, time, urllib.request
 import numpy as np, pandas as pd
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -48,8 +48,15 @@ def _call(prompt, tools=None):
                                  headers={"Content-Type": "application/json",
                                           "Authorization": f"Bearer {os.environ['XAI_API_KEY']}"})
     t0 = time.time()
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-        resp = json.loads(r.read().decode("utf-8"))
+    for attempt in range(2):                # a reply cut off in transit (2026-10-15) is never read, so retry once
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                resp = json.loads(r.read().decode("utf-8"))
+            break
+        except (http.client.IncompleteRead, ConnectionResetError):
+            if attempt:
+                raise
+            time.sleep(5)
     text = resp.get("output_text") or ""
     if not text:
         text = "\n".join(c.get("text", "") for it in resp.get("output", []) or [] if it.get("type") == "message"
