@@ -7,15 +7,17 @@ trade (markouts). This collector polls, every HF_TICK seconds (default 5):
   - the top of book of every KXBTCD market closing in the next HF_HOURS hours (default 26) whose strike is within
     HF_BAND (default 5%) of the index, one call per event, recording a market only when its quote changed
     (plus a full keyframe every 10 minutes),
-and, 8 markets a tick in turn, the trade prints of up to 40 markets within HF_TRADE_BAND (default 2%) of the index
-(each revisited about every 25 seconds). Rows go to
+and, 4 markets a tick in turn, every trade print of up to 40 markets within HF_TRADE_BAND (default 2%) of the
+index (each asks for all trades since that market's last one, so none are missed between visits). Rows go to
 data/raw/kalshi_hf/<day>/kalshi_hf_<HHMMSS>Z.jsonl.gz, one file per 5 minutes. tools/export_hf_for_ocaml.py turns
 them into CSVs for the OCaml contracts project.
 
-Run it by hand on the Mac, from collect/ (it needs a process that stays up; the cloud workflows are hourly):
-    caffeinate -i python3 kalshi_hf.py                    until stopped (Ctrl-C saves the open chunk)
+It needs a process that stays up (the cloud workflows are hourly). Best on an always-on server: see
+collect/server/README.md. On the Mac, from collect/:
+    caffeinate -s python3 kalshi_hf.py                    until stopped (Ctrl-C saves the open chunk)
     HF_SECONDS=60 HF_OUT=/tmp/hf python3 kalshi_hf.py     a one-minute test into /tmp/hf
-caffeinate keeps the Mac from idle-sleeping while it runs; a closed lid on battery still sleeps it.
+caffeinate -s stops sleep on AC power only; a Mac on battery with its lid closed still sleeps, and the book and index
+have gaps for as long as it does (trades are backfilled on waking).
 
 Seal: KXBTCD quotes from 2026-10-05 to 2026-11-27 fall inside layer 5's window. Collecting them is fine; comparing
 them with option fair values before 2026-11-30 would look at layer 5's answer, so the analysis waits (see
@@ -35,9 +37,9 @@ BAND = float(os.environ.get("HF_BAND", "0.05"))
 TRADE_BAND = float(os.environ.get("HF_TRADE_BAND", "0.02"))
 SECONDS = float(os.environ.get("HF_SECONDS", "0"))        # 0 = run until stopped
 OUT = os.environ.get("HF_OUT", os.path.join(DATA, KIND))
-TRADES_EVERY, REFRESH_EVERY, FLUSH_EVERY, MAX_TRADE_TICKERS, TRADES_PER_TICK = 20, 600, 300, 40, 8
+REFRESH_EVERY, FLUSH_EVERY, MAX_TRADE_TICKERS, TRADES_PER_TICK = 600, 300, 40, 4
 PAUSE = 0.08                                             # between quote calls
-TRADE_PAUSE = 0.25                                       # between trade calls: a first test hit Kalshi's limit at 0.08
+TRADE_PAUSE = 0.15                                       # between trade calls: a first test hit Kalshi's limit at 0.08
 
 
 def num(x):
@@ -83,6 +85,23 @@ def upcoming_events(now):
         if now < close <= now + timedelta(hours=HOURS):
             closes[m["event_ticker"]] = close
     return sorted(closes, key=closes.get)
+
+
+def recent_trades(ticker, min_ts, max_pages=20):
+    """Every trade in [ticker] since [min_ts], following Kalshi's cursor: after a gap (the machine slept, the
+    network dropped) a busy market can have more than one page of 1,000."""
+    out, cursor = [], None
+    for _ in range(max_pages):
+        q = {"ticker": ticker, "min_ts": min_ts, "limit": 1000}
+        if cursor:
+            q["cursor"] = cursor
+        page = get_json(f"{BASE}/markets/trades?{urllib.parse.urlencode(q)}", retries=1, timeout=10)
+        out += page.get("trades", [])
+        cursor = page.get("cursor")
+        if not cursor:
+            break
+        time.sleep(TRADE_PAUSE)
+    return out
 
 
 def book_row(t, m):
@@ -169,16 +188,15 @@ def main():
                 if abs(k / index - 1) <= TRADE_BAND:
                     near_trade.append(m["ticker"])
             time.sleep(PAUSE)
-        # Trades for a few markets each tick, round-robin, so a full sweep never stalls the quote polling:
-        # TRADES_PER_TICK markets a tick revisits each of 40 markets about every 25 seconds.
+        # Trades for a few markets each tick, round-robin, so a full sweep never stalls the quote polling. Each
+        # call asks for everything since that market's last saved trade, so a slower revisit loses nothing.
         near_trade = near_trade[:MAX_TRADE_TICKERS]
         for _ in range(min(TRADES_PER_TICK, len(near_trade))):
             tk = near_trade[rr % len(near_trade)]
             rr += 1
-            since = trade_since.get(tk, int(tick_start) - 2 * TRADES_EVERY)
+            since = trade_since.get(tk, int(tick_start) - 60)
             try:
-                q = urllib.parse.urlencode({"ticker": tk, "min_ts": since - 1, "limit": 1000})
-                trades = get_json(f"{BASE}/markets/trades?{q}", retries=1, timeout=10).get("trades", [])
+                trades = recent_trades(tk, since - 1)
             except urllib.error.HTTPError as e:
                 log(f"{tk}: trades failed: {e!r}")
                 if e.code == 429:                 # rate limited: back off, carry on next tick

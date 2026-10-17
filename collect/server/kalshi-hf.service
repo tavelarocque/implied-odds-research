@@ -1,0 +1,20 @@
+# systemd unit for collect/kalshi_hf.py on an always-on Linux server (see README.md in this folder).
+# Installed by deploy.sh as /etc/systemd/system/kalshi-hf.service.
+[Unit]
+Description=Implied Odds high-frequency Kalshi KXBTCD collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=hf
+WorkingDirectory=/home/hf/implied-odds/collect
+Environment=HF_OUT=/home/hf/implied-odds/data/raw/kalshi_hf
+ExecStart=/usr/bin/python3 kalshi_hf.py
+Restart=always
+RestartSec=30
+# SIGTERM makes the collector save its open 5-minute chunk before exiting.
+KillSignal=SIGTERM
+TimeoutStopSec=60
+
+[Install]
+WantedBy=multi-user.target
