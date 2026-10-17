@@ -30,7 +30,8 @@ git remote remove origin
 PRIVATE_EMAIL="${PRIVATE_EMAIL:-$(git -C "$ROOT" config user.email)}"   # read from git, never written in this file
 [ -n "$PRIVATE_EMAIL" ] || { echo "ABORT: could not determine the private email"; exit 1; }
 printf 'Tave Larocque <%s> <%s>\n' "$PUBLIC_EMAIL" "$PRIVATE_EMAIL" > "$TMP/mailmap"
-printf '%s==>[email removed]\n' "$PRIVATE_EMAIL" > "$TMP/replace"
+LOCAL="${PRIVATE_EMAIL%@*}"; DOMAIN="${PRIVATE_EMAIL#*@}"; STEM="${DOMAIN%%.*}"   # the address and its parts
+printf '%s==>[email removed]\n%s==>[removed]\n%s==>[removed]\n' "$PRIVATE_EMAIL" "$LOCAL" "$STEM" > "$TMP/replace"
 "$FILTER" --force --quiet --mailmap "$TMP/mailmap" --replace-text "$TMP/replace" \
   --invert-paths --path HANDOFF.md --path scratch/ --path .vscode/ \
   --message-callback 'import re
@@ -39,8 +40,8 @@ return re.sub(rb"\n*Claude-Session: \S+\n?", b"\n", message)'
 echo "checking the public copy..."
 if git log --all --format='%an %ae %cn %ce%n%B' | grep -qiE 'claude\.ai/code/session'; then
   echo "ABORT: a session link is still present"; exit 1; fi
-if git log --all -p --format='%an %ae %cn %ce%n%B' | grep -qiF "$PRIVATE_EMAIL"; then
-  echo "ABORT: the private email is still present (metadata or file contents)"; exit 1; fi
+if git log --all -p --format='%an %ae %cn %ce%n%B' | grep -qiF -e "$PRIVATE_EMAIL" -e "$LOCAL" -e "$STEM"; then
+  echo "ABORT: the private email (or part of it) is still present (metadata or file contents)"; exit 1; fi
 if git log --all -p | grep -qE 'xai-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|BEGIN [A-Z ]*PRIVATE KEY'; then
   echo "ABORT: something that looks like a secret is in the history"; exit 1; fi
 if git ls-tree -r --name-only HEAD | grep -qE '^(HANDOFF\.md|scratch/|\.vscode/|data/)'; then
