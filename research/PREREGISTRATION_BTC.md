@@ -75,3 +75,10 @@ The collection schedule was cut from every 30 minutes to hourly at :07, for cost
 of the account's free GitHub Actions minutes and risked stopping the stock collection with it. Each hourly KXBTCD set
 is open for one hour, so each is still captured once, about 53 minutes before it settles; the 5pm ET set is captured
 about 24 times. Nothing else changes. Written before the first snapshot counted (2026-10-10 00:00 UTC).
+
+## Known limitation, noted 2026-10-16 (no change to the method)
+
+Some fitted smiles have a near-sharp kink (SVI s of order 1e-6). For a strike within a few dollars of the kink,
+p_opt depends on the finite-difference step: 2 of 13,804 contract-snapshots (2026-10-15 to 17) move by more than
+1 point when the step shrinks 100-fold. The method stays as registered; layer 15 (amendment 2026-10-16) reports
+whether any conclusion depends on these contracts. A future layer that fits smiles should put a floor on s.

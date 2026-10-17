@@ -54,3 +54,22 @@ no detectable miscalibration in 8 weeks (too few independent days). Fitted k bel
 ## Ledger
 
 Rules 1 and 2 enter `research/ledger_claims.csv` as L15a-c (options: SPX, NDX, BTC) and L15d-f (Kalshi) when decided.
+
+## Amendment, 2026-10-16 (before any layer 5 statistic; adds two reported robustness checks, changes no rule)
+
+7. **Finite-difference sensitivity (reported).** Every p_opt is a central difference of the fitted call curve with
+   step h = F * 1e-4. Some fitted smiles have a near-sharp kink (SVI s of order 1e-6; 16 of 125 Bitcoin event fits on
+   2026-10-15 to 17), and for a strike sitting on the kink p_opt depends on h. Found by an independent reimplementation
+   of the pricer (the OCaml contracts project): 2 of 13,804 Bitcoin contract-snapshots move by more than 1 point when h
+   shrinks 100-fold; one was a layer 5 paper trade whose side and signal were the same under both steps. For every
+   contract-snapshot, also compute p_opt with h = F * 1e-6 and flag |difference| > 0.01. Report the number flagged, and
+   rules 1 and 2 plus layer 5's trading rule rerun without flagged contracts. The registered results use h = F * 1e-4
+   as before; this only shows whether any conclusion depends on the flagged contracts.
+8. **Model-free bounds (reported; Malz 2014, NY Fed SR 677).** Without any smile model, P(S_T > K) for K between
+   adjacent quoted strikes K1 < K <= K2 is bounded by call-spread slopes: at most (C_ask(K0) - C_bid(K1)) / (K1 - K0)
+   and at least (C_bid(K2) - C_ask(K3)) / (K3 - K2), with K0 < K1 < K2 < K3 consecutive quoted strikes, prices in USD
+   (Deribit premium times its forward; Cboe mid-parity discounting as in implied/bl.py). Where a neighbour is missing
+   the bound is undefined and the contract is left out of this check. Report: the share of contract-snapshots, and of
+   layer 5 trades, where Kalshi's mid lies outside the bounds (a disagreement no smoothing choice can explain), and
+   layer 5's trading rule restricted to them. Raw Bitcoin quotes are coarse (tick about $8), so the bounds may be wide;
+   that is reported as found.
