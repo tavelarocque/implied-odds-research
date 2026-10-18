@@ -1,9 +1,10 @@
 # DRAFT, not registered: layer 16, does passive liquidity in Kalshi's Bitcoin contracts pay?
 
-**Status: draft written 2026-10-17 by the assistant at Tave's request. It registers nothing until Tave edits it,
+**Status: draft written 2026-10-17 by the assistant at Tave's request; data section revised the same day to
+backfilled trades and prices after the first live day lost an hour to the Mac sleeping. It registers nothing until Tave edits it,
 renames it to `PREREGISTRATION_LAYER16.md` and commits it.** That commit is the timestamp, and it must land before
 any high-frequency data from the test window below is compared with option fair values. No such comparison has been
-made: collection (`collect/kalshi_hf.py`) starts with this draft.
+made.
 
 ## Question
 
@@ -18,22 +19,28 @@ markout means passive quotes earn more than they lose to informed flow; a negati
 enough to beat the spread.
 
 V comes from the OCaml contracts project (`~/CODE/contracts`, `Markout`): the latest hourly Deribit smile for the
-event (`tools/export_hf_for_ocaml.py`), moved with the Deribit index since that snapshot (sticky moneyness) and
-shortened to the time left (constant vol), priced through the contract language. It is risk-neutral, so it carries
+event (`tools/export_hf_for_ocaml.py --source backfill`), moved by the BTC price's own change since that snapshot
+(sticky moneyness; one price series at both ends, so a level difference between Kraken and Deribit's index cancels)
+and shortened to the time left (constant vol), priced through the contract language. It is risk-neutral, so it carries
 the volatility risk premium, which tilts the markout at long horizons; the primary horizon is short for that reason.
 
 ## Data and dates
 
-- **Collection:** `collect/kalshi_hf.py`, from 2026-10-17. Top of book every 5 seconds for strikes within 5% of the
-  index, trade prints every 20 seconds for strikes within 2%.
-- **Development:** data from 2026-10-17 to 2026-11-27. It lies inside layer 5's window (Kalshi BTC contracts
-  settling 2026-10-10 to 2026-11-27), so it is not compared with option fair values before 2026-11-30; the OCaml
+- **Trades and prices: backfilled after settlement** (`collect/kalshi_trades_backfill.py`, weekly). Kalshi keeps
+  each market's full trade history; Kraken's XBT/USD trade history gives the last BTC price each second. Markets:
+  KXBTCD "above" contracts within 2% of the Coinbase price one hour or 24 hours before the close (chosen without the
+  settled price). Nothing has to stay running, so the sample has no gaps from a machine sleeping.
+- **Quotes (optional, descriptive only):** `collect/kalshi_hf.py`, top of book every 5 seconds while a machine runs
+  it. Only the quote replay needs them; the verdict does not.
+- **Smiles:** the hourly Deribit snapshots the cloud workflow already collects (`tools/export_for_ocaml.py`).
+- **Development:** trades from 2026-10-17 to 2026-11-27. They lie inside layer 5's window (Kalshi BTC contracts
+  settling 2026-10-10 to 2026-11-27), so they are not compared with option fair values before 2026-11-30; the OCaml
   tool refuses to. Before then the method is developed on synthetic data only.
 - **Test window:** trades from 2026-11-28 to 2026-12-27 inclusive (UTC), outside layer 5's window. The analysis runs
   once, on or after 2026-12-28.
-- **Trades used:** KXBTCD "above" contracts with |ln(strike / F)| <= 1% at the trade, at least 15 minutes and at
-  most 24 hours before close, a fair value available (smile less than 75 minutes old, index less than 30 seconds
-  old), and a trade price between 5 and 95 cents.
+- **Trades used:** strike within 1% of the BTC price at the trade (|ln(strike / price)| <= 0.01), at least 15 minutes
+  and at most 24 hours before close, a fair value available (smile less than 75 minutes old, BTC price less than 30
+  seconds old), and a trade price between 5 and 95 cents.
 
 ## Decision rule
 
@@ -55,8 +62,8 @@ from 2,000 bootstrap resamples of whole events (trades in the same event are not
 
 ## Known limitations, stated in advance
 
-- Polling every 5 seconds and pulling trades every 20 seconds misses the order of events inside those intervals.
-  Markouts shorter than about 10 seconds are not meaningful here.
-- The Mac collects only while awake; gaps are reported, not filled.
+- Kraken's last trade in a second stands in for BTC's price; in a second without a Kraken trade the previous one is
+  used (at most 30 seconds old, or the trade is dropped). Markouts shorter than about 10 seconds are not meaningful.
+- The quote collector runs only while its machine is awake; the replay reports its gaps. The verdict doesn't use it.
 - V is a model value. A negative markout can mean takers are informed, or that V lags the market (the smile is up
   to an hour old; only the index moves it in between).
