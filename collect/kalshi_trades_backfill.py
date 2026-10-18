@@ -65,9 +65,12 @@ def coinbase_day(day):
     if os.path.exists(path):
         return json.load(open(path))
     start = datetime.fromisoformat(day).replace(tzinfo=timezone.utc)
-    rows = []
+    rows, now = [], datetime.now(timezone.utc)
     for k in range(5):                                 # 300 candles per request
         a, b = start + timedelta(minutes=300 * k), start + timedelta(minutes=min(300 * (k + 1), 1440) - 1)
+        if a >= now:                                   # today's later hours haven't happened yet; Coinbase refuses them
+            break
+        b = min(b, now)
         q = urllib.parse.urlencode({"granularity": 60, "start": a.isoformat(), "end": b.isoformat()})
         rows += get_json(f"{COINBASE}?{q}", retries=3, timeout=30)
         time.sleep(PAUSE)
