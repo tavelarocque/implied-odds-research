@@ -24,7 +24,9 @@ git clone --quiet --no-local --single-branch --branch main "$ROOT" "$TMP/repo"
 cd "$TMP/repo"
 git fetch --quiet "$ROOT" "+refs/remotes/origin/main:refs/remotes/pushed/main"   # publish only what is pushed to GitHub
 git reset --quiet --hard pushed/main
-PRIVATE_EMAIL="$(git log -1 --format=%ae)"
+# The private address is the one on the earliest commits. Newer commits may already use the noreply address
+# (GitHub blocks pushes that expose the private one), so don't read it from the latest commit.
+PRIVATE_EMAIL="$(git log --format=%ae | grep -vxF "$PUBLIC_EMAIL" | tail -1 || true)"
 git update-ref -d refs/remotes/pushed/main
 git remote remove origin
 PRIVATE_EMAIL="${PRIVATE_EMAIL:-$(git -C "$ROOT" config user.email)}"   # read from git, never written in this file
@@ -38,14 +40,16 @@ printf '%s==>[email removed]\n%s==>[removed]\n%s==>[removed]\n' "$PRIVATE_EMAIL"
 return re.sub(rb"\n*Claude-Session: \S+\n?", b"\n", message)'
 
 echo "checking the public copy..."
-if git log --all --format='%an %ae %cn %ce%n%B' | grep -qiE 'claude\.ai/code/session'; then
+if git log --all --format='%an %ae %cn %ce%n%B' | grep -iE 'claude\.ai/code/session' >/dev/null; then
   echo "ABORT: a session link is still present"; exit 1; fi
-if git log --all -p --format='%an %ae %cn %ce%n%B' | grep -qiF -e "$PRIVATE_EMAIL" -e "$LOCAL" -e "$STEM"; then
+if git log --all -p --format='%an %ae %cn %ce%n%B' | grep -iF -e "$PRIVATE_EMAIL" -e "$LOCAL" -e "$STEM" >/dev/null; then
   echo "ABORT: the private email (or part of it) is still present (metadata or file contents)"; exit 1; fi
-if git log --all -p | grep -qE 'xai-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|BEGIN [A-Z ]*PRIVATE KEY'; then
+if git log --all -p | grep -E 'xai-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|BEGIN [A-Z ]*PRIVATE KEY' >/dev/null; then
   echo "ABORT: something that looks like a secret is in the history"; exit 1; fi
-if git ls-tree -r --name-only HEAD | grep -qE '^(HANDOFF\.md|scratch/|\.vscode/|data/)'; then
+if git ls-tree -r --name-only HEAD | grep -E '^(HANDOFF\.md|scratch/|\.vscode/|data/)' >/dev/null; then
   echo "ABORT: an excluded path is still present"; exit 1; fi
+if git log --all --format='%ae%n%ce' | grep -vxF "$PUBLIC_EMAIL" >/dev/null; then
+  echo "ABORT: a commit carries an author or committer email other than the public noreply address"; exit 1; fi
 echo "ok: head $(git rev-parse --short HEAD), $(git rev-list --count HEAD) commits, $(git ls-tree -r --name-only HEAD | wc -l | tr -d ' ') files, author $(git log -1 --format='%an <%ae>')"
 
 if [ "${DRY:-0}" = "1" ]; then echo "DRY=1: not pushing"; exit 0; fi
