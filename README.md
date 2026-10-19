@@ -2,6 +2,13 @@
 
 **Do prediction markets and options markets agree on the odds of the same event, and when they disagree, who is right?**
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/density_collapse_dark.png">
+    <img src="assets/density_collapse_light.png" alt="Bitcoin risk-neutral density for one Kalshi daily contract, re-estimated every two hours from Deribit options, narrowing as settlement approaches" width="100%">
+  </picture>
+</p>
+
 Implied Odds compares Kalshi's S&P 500, Nasdaq-100 and Bitcoin contracts with the probabilities implied by option
 prices (SPX/NDX options via Breeden–Litzenberger on SVI smiles; Deribit for Bitcoin). It runs a live data pipeline in
 the cloud, paper-trades the gap under fixed rules, and judges every idea with tests written down *before* the data
@@ -30,14 +37,41 @@ doing that:
 
 ## How it works
 
+```mermaid
+flowchart LR
+  subgraph collect["Collect · cloud, 24/7"]
+    A["Cboe SPX / NDX options"]
+    B["Deribit BTC options"]
+    C["Kalshi ladders"]
+    D["Polymarket books"]
+  end
+  subgraph price["Price"]
+    G["Shift Deribit smile to<br/>Kalshi's settlement time"]
+    E["SVI smile fit<br/>arbitrage-checked"]
+    F["Breeden–Litzenberger<br/>P(close &gt; K)"]
+  end
+  subgraph test["Test"]
+    H["Paper trades<br/>fees, 100-lot, ≥3c gap"]
+    X["Execution check (5x)<br/>order-book requote + prints"]
+    I["Settle on Kalshi's result"]
+    J["Pre-registered verdicts<br/>ledger · drift monitor"]
+  end
+  A --> E
+  B --> G --> E
+  E --> F --> H
+  C --> H
+  D -.-> J
+  H --> X
+  H --> I --> J
 ```
- collect (cloud, GitHub Actions)        price                          test
- ─────────────────────────────          ─────                          ────
- Cboe SPX/NDX options   ─┐     SVI smile fit (arbitrage-checked)      paper trades, fees, 100-lot
- Kalshi ladders + BTC   ─┼──►  Breeden–Litzenberger → P(close > K) ──► settled on Kalshi's result
- Deribit BTC options    ─┤     Deribit smile moved to Kalshi's          pre-registered verdicts
- Polymarket books       ─┘     settlement time                          + ledger + drift monitor
-```
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/vol_surface_dark.png">
+    <img src="assets/vol_surface_light.png" alt="Bitcoin implied-volatility surface from Deribit options, one SVI smile per expiry" width="100%">
+  </picture>
+</p>
+<p align="center"><sub>Rotate it yourself: <a href="assets/vol_surface.stl">assets/vol_surface.stl</a> opens in GitHub's interactive 3D viewer. Figures are regenerated with <code>tools/make_readme_visuals.py</code> and use option prices only.</sub></p>
 
 - **Stocks:** every 30 minutes on weekdays during US market hours.
 - **Bitcoin:** every hour, all week. Deribit options expire at 08:00 UTC and Kalshi settles on the hour, so
