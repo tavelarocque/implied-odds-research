@@ -712,3 +712,26 @@ vs 0.039 Kalshi, far too few to judge.
 
 Replay of the first five days (decisions only): 18 S&P and 23 Nasdaq trades. Capital tied up per day was a median of
 about $200 per index: a 100-lot at these prices risks about $20 or less.
+
+## Layer 5s readout: not confirmed (rule date 2026-11-09, read 2026-11-10)
+
+Pre-registered in `research/PREREGISTRATION_LAYER5S.md`. Window: layer 5 Bitcoin trades with snapshot time from
+2026-10-15 06:00 UTC to 2026-11-08 00:00 UTC, settled: 3,154 trades over 24 UTC days (1,890 stay, 1,264 move), above
+the 300-trade, 15-day minimum, so the window was not extended. Read one day after the scheduled date; the window was
+fixed in advance, so the delay changes nothing.
+
+- H1, stay mean > 0: -$0.67 per trade, 95% [-3.43, +1.85]. Not above 0.
+- H2, stay minus move > 0: +$0.31, 95% [-3.18, +3.55]. Not above 0.
+- H3, move mean < 0 (secondary): -$0.98, 95% [-3.41, +1.91]. Not below 0.
+
+Verdict under the reading rule: **not confirmed**. A stay-only version of layer 5 is not eligible for the real-money
+rule. Ledger: L5Sa, L5Sb.
+
+Descriptive, decides nothing: stay trades won 78% of the time and move trades 16%, yet both lost money on average.
+Stay trades in the far third of |K/S - 1| lost $2,341 over 795 trades, nearly all of it between 2026-11-03 and
+2026-11-06 and chiefly in the 2026-11-05 drop, when Bitcoin fell through a ladder of deep in-the-money hourly and
+daily contracts within about an hour. Near and mid stay trades made $1,076. Hourly stay trades made $40 in total;
+daily stay trades lost $1,305. Move trades lost mostly at mid distance (-$1,275). The 2026-10-14 split that
+motivated this layer (stay +$1,072 vs move -$628 over five days) did not hold out of sample: the stay side's high win
+rate came with a heavy left tail, the payoff shape of selling insurance. Layer 5 itself is unchanged and is read on
+2026-11-30.

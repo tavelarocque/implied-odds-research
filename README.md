@@ -87,7 +87,7 @@ flowchart LR
 | Strategy discovery | 2,120 rule-based strategies on SPY and sector ETFs: how much survives out of sample? | Done |
 | 1–4, 6 | Kalshi calibration; Kalshi vs Polymarket; who leads price discovery; Hawkes self-excitation | Done |
 | 5 | Options-implied fair value vs Kalshi (stocks and Bitcoin), fee-inclusive paper trading | Live; verdict **2026-11-30** |
-| 5s | Is layer 5's Bitcoin edge only in bets that the price will *not* move far? (post-hoc idea, forward test) | Live; verdict **2026-11-09** |
+| 5s | Is layer 5's Bitcoin edge only in bets that the price will *not* move far? (post-hoc idea, forward test) | **Not confirmed** (read 2026-11-10): stay trades −$0.67 per trade, 95% −3.43 to +1.85 |
 | 5x | Would layer 5's paper trades have filled? Order-book requotes and public trade prints | Live; read with layer 5 |
 | 7 / 7b | How fast Kalshi's daily and hourly contracts price an index move | Collecting; **2026-11-30** |
 | 11 / 11b | Sell Bitcoin downside long shots on fear / negative-funding days | Live; **2027-02-01** |

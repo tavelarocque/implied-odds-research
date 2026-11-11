@@ -57,3 +57,5 @@ K12c,12,Kronos adds information beyond Kalshi's price 1h (pre-registered seconda
 K12d,12,Kronos adds information beyond Kalshi's price 3h (pre-registered secondary),p,0.229,0.054,0.412,0,0.014,logit coefficient; day bootstrap
 L13a,13,Lognormal blend beats Kalshi mid Brier 1h on the holdout (pre-registered test A),p,-0.00093,-0.00188,0.00012,0,0.0580,day bootstrap; 97.5% interval
 L13b,13,Lognormal blend beats Kalshi mid Brier 3h on the holdout (pre-registered test A),p,-0.00169,-0.00268,-0.00047,0,0.0020,day bootstrap; 97.5% interval
+L5Sa,5s,Layer 5 BTC stay-side trades (bets on a smaller move) have positive mean P&L (pre-registered H1),ci,-0.67,-3.43,1.85,0,,USD per trade; UTC-day bootstrap seed 515; trades 2026-10-15 to 2026-11-08; not confirmed
+L5Sb,5s,Stay-side mean P&L exceeds move-side mean P&L (pre-registered H2),ci,0.31,-3.18,3.55,0,,USD per trade; UTC-day bootstrap seed 515; trades 2026-10-15 to 2026-11-08; not confirmed
