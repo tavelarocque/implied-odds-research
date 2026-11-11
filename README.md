@@ -109,7 +109,7 @@ flowchart LR
   modelled; the pre-registered model overstated it, and the correction is documented.
 - **A Kalshi + realized-volatility blend beat Kalshi's own price** on the sealed holdout at 3 hours (Brier −0.0017,
   97.5% interval −0.0027 to −0.0005). Its live forward test (13b) decides on 2027-02-01.
-- **The ledger** (58 claims as of 2026-10-10): 34 have p < 0.05 on their own, 19 survive the false-discovery
+- **The ledger** (60 claims as of 2026-11-10): 34 have p < 0.05 on their own, 19 survive the false-discovery
   adjustment. Calibration slopes and every "best of a search" result do not.
 
 The full write-up of each study, including the errors found and fixed along the way, is in
